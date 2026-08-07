@@ -27,6 +27,21 @@ jobs:
           category: "integration"
           ignore: "topics"
   
+  # Ensure translations/en.json stays in sync with strings.json
+  translations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Check translations/en.json is in sync with strings.json
+        run: |
+          python scripts/sync_translations.py --check
+
   # Type checking with mypy
   type-check:
     runs-on: ubuntu-latest

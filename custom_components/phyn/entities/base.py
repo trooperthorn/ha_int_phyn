@@ -76,7 +76,12 @@ class PhynEntity(Entity):
 
     async def async_update(self) -> None:
         """Update Phyn entity."""
-        await self._device.async_request_refresh()  # type: ignore[attr-defined]
+        try:
+            # Prefer coordinator refresh when available
+            await self._device.coordinator.async_request_refresh()
+        except AttributeError:
+            # Fallback for older device structure
+            await self._device.async_request_refresh()  # type: ignore[attr-defined]
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""

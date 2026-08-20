@@ -1,0 +1,108 @@
+blueprint:
+  name: "Phyn: Freeze protection"
+  description: >
+    Warn (and optionally shut the water off) when pipes are at risk of
+    freezing.
+
+
+    Watches any temperature sensor — an outdoor sensor from a weather station
+    integration (e.g. a Davis WeatherLink station), a Phyn Smart Water
+    Sensor's **Air Temperature**, or the Phyn Plus **Current water
+    temperature** — and can additionally react to Phyn's own **Freeze Warning
+    Alert** / **Low Temperature Alert** sensors.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_phyn/blob/main/blueprints/automation/phyn/freeze_protection.yaml
+  input:
+    temperature_sensor:
+      name: Temperature sensor
+      description: >
+        The temperature to watch, e.g. an outdoor weather-station sensor or a
+        Phyn air/water temperature sensor.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+              device_class: temperature
+    freeze_threshold:
+      name: Freeze threshold
+      description: >
+        Alert when the temperature drops below this value, in the sensor's
+        own unit (e.g. 34 °F / 1 °C).
+      default: 34
+      selector:
+        number:
+          min: -40
+          max: 60
+          step: 0.5
+          mode: box
+    duration:
+      name: Time below threshold
+      description: How long the temperature must stay below the threshold.
+      default:
+        minutes: 10
+      selector:
+        duration:
+    freeze_alert_sensors:
+      name: Phyn freeze alert sensors (optional)
+      description: >
+        Phyn "Freeze Warning Alert" / "Low Temperature Alert" binary sensors
+        that should also trigger this automation.
+      default: []
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+          multiple: true
+    close_valve:
+      name: Close the shutoff valve
+      description: >
+        Also close the selected valve(s) — for unoccupied properties where a
+        burst pipe is worse than no water.
+      default: false
+      selector:
+        boolean:
+    valve_entity:
+      name: Shutoff valve(s)
+      default: []
+      selector:
+        entity:
+          filter:
+            - integration: phyn
+              domain: valve
+          multiple: true
+    actions:
+      name: Notification and follow-up actions
+      description: >
+        Actions to run — notify your phone, turn on heat tape, open a faucet
+        reminder, etc.
+      default: []
+      selector:
+        action:
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: numeric_state
+    entity_id: !input temperature_sensor
+    below: !input freeze_threshold
+    for: !input duration
+  - trigger: state
+    entity_id: !input freeze_alert_sensors
+    from: "off"
+    to: "on"
+
+variables:
+  close_valve: !input close_valve
+  valve_entity: !input valve_entity
+
+actions:
+  - if:
+      - condition: template
+        value_template: "{{ close_valve and valve_entity | count > 0 }}"
+    then:
+      - action: valve.close_valve
+        target:
+          entity_id: !input valve_entity
+        continue_on_error: true
+  - sequence: !input actions

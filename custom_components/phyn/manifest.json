@@ -4,14 +4,16 @@
   "after_dependencies": ["recorder"],
   "codeowners": ["@mizterb","@jordanruthe"],
   "config_flow": true,
+  "dhcp": [{ "macaddress": "28F537*" }],
   "documentation": "https://github.com/trooperthorn/ha_int_phyn",
-  "iot_class": "cloud_polling",
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/trooperthorn/ha_int_phyn/issues",
   "loggers": ["custom_components.phyn","aiophyn"],
   "homeassistant": "2026.6.4",
   "requirements": [
     "aiophyn>=2026.6.4"
   ],
-  "version": "2026.08.12",
+  "version": "2026.08.20",
   "quality_scale": "platinum"
 }

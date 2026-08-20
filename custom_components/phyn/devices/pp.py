@@ -5,17 +5,26 @@ from typing import TYPE_CHECKING, Any
 from aiophyn.errors import RequestError
 from asyncio import Lock, timeout
 
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import UpdateFailed
 import homeassistant.util.dt as dt_util
 
-from ..const import LOGGER
+from ..const import (
+    CONF_LOCAL_HOSTS,
+    LOCAL_FAILURE_THRESHOLD,
+    LOCAL_POLL_INTERVAL_SECONDS,
+    LOGGER,
+)
+from ..jnap import JnapClient, JnapError
 from ..entities.base import (
     PhynAlertEvent,
     PhynAlertSensor,
+    PhynConnectivitySensor,
     PhynDailyUsageSensor,
     PhynFirmwareUpdateAvailableSensor,
     PhynFirwmwareUpdateEntity,
     PhynPressureSensor,
+    PhynSignalStrengthSensor,
     PhynTemperatureSensor,
 )
 from ..entities.pp import (
@@ -24,14 +33,17 @@ from ..entities.pp import (
     PhynConsumptionSensor,
     PhynCurrentFlowRateSensor,
     PhynFlowState,
+    PhynLatestLeakTestSensor,
     PhynLeakTestLeakDetected,
     PhynLeakTestSensor,
     PhynLeakTestWarning,
+    PhynLocalConnectivitySensor,
     PhynScheduledLeakTestEnabledSwitch,
     PhynValve,
 )
 from .base import PhynDevice
 
+from datetime import datetime, timedelta, timezone
 import math
 import time
 
@@ -79,6 +91,18 @@ class PhynPlusDevice(PhynDevice):
         self._rt_device_state: dict[str, Any] = {}
         self._state_lock: Lock = Lock()
 
+        # Local (LAN) JNAP access — see LOCAL_ACCESS.md. Configured per device
+        # via the integration options (or auto-configured by DHCP discovery).
+        local_hosts: dict[str, str] = coordinator.config_entry.options.get(
+            CONF_LOCAL_HOSTS, {}
+        )
+        self._local_host: str | None = local_hosts.get(device_id) or None
+        self._local_client: JnapClient | None = (
+            JnapClient(self._local_host) if self._local_host else None
+        )
+        self._local_active: bool = False
+        self._local_failures: int = 0
+
         self.entities = [
             PhynAlertEvent(self),
             PhynAlertSensor(self, "alert_battery", "Battery Alert", "alert_battery"),
@@ -91,20 +115,25 @@ class PhynPlusDevice(PhynDevice):
             PhynAlertSensor(self, "alert_temperature", "Temperature Alert", "alert_temperature"),
             PhynAutoShutoffModeSwitch(self),
             PhynAwayModeSwitch(self),
+            PhynConnectivitySensor(self),
             PhynFlowState(self),
             PhynDailyUsageSensor(self),
             PhynCurrentFlowRateSensor(self),
             PhynConsumptionSensor(self),
             PhynFirmwareUpdateAvailableSensor(self),
             PhynFirwmwareUpdateEntity(self),
+            PhynLatestLeakTestSensor(self),
             PhynLeakTestLeakDetected(self),
             PhynLeakTestSensor(self),
             PhynLeakTestWarning(self),
             PhynScheduledLeakTestEnabledSwitch(self),
+            PhynSignalStrengthSensor(self),
             PhynTemperatureSensor(self, "temperature", NAME_WATER_TEMPERATURE),
             PhynPressureSensor(self, "pressure", NAME_WATER_PRESSURE),
             PhynValve(self),
         ]
+        if self._local_host:
+            self.entities.append(PhynLocalConnectivitySensor(self))
 
     async def async_update_data(self):
         """Update data via library."""
@@ -162,6 +191,22 @@ class PhynPlusDevice(PhynDevice):
         """Check if a leak test is running"""
         sov_status = self._device_state.get("sov_status", {})
         return sov_status.get("v") == "LeakExp"
+
+    @property
+    def last_leak_test_time(self) -> datetime | None:
+        """Return when the most recent leak (health) test finished, as UTC.
+
+        The API reports ``end_time`` as an epoch timestamp; the scale
+        (seconds vs milliseconds) is normalized defensively.
+        """
+        if not self._latest_health_test:
+            return None
+        end_time = self._latest_health_test.get("end_time")
+        if not isinstance(end_time, (int, float)) or end_time <= 0:
+            return None
+        if end_time > 1e12:  # milliseconds epoch
+            end_time /= 1000
+        return datetime.fromtimestamp(end_time, tz=timezone.utc)
 
     @property
     def temperature(self) -> float:
@@ -226,13 +271,191 @@ class PhynPlusDevice(PhynDevice):
         sov_status = self._device_state.get("sov_status", {})
         return sov_status.get("v") == "Partial"
 
-    async def async_setup(self) -> str:  # type: ignore[override]
+    @property
+    def available(self) -> bool:
+        """Available when locally reachable, else when the cloud says online."""
+        if self._local_active:
+            return True
+        return super().available
+
+    @property
+    def local_host(self) -> str | None:
+        """Return the configured local (LAN) host, if any."""
+        return self._local_host
+
+    @property
+    def local_active(self) -> bool:
+        """Return True while local (LAN) polling is healthy."""
+        return self._local_active
+
+    async def async_setup(self) -> str | None:  # type: ignore[override]
         """Setup a new device coordinator"""
         LOGGER.debug("Setting up coordinator")
 
         await self._coordinator.api_client.mqtt.add_event_handler("update", self.on_device_update)
         await self._coordinator.api_client.mqtt.subscribe(f"prd/app_subscriptions/{self._phyn_device_id}")
-        return self._device_state["sov_status"]["v"]
+
+        if self._local_client is not None:
+            LOGGER.debug(
+                "Starting local JNAP polling for %s at %s every %ss",
+                self._phyn_device_id,
+                self._local_host,
+                LOCAL_POLL_INTERVAL_SECONDS,
+            )
+            self._coordinator.config_entry.async_on_unload(
+                async_track_time_interval(
+                    self._coordinator.hass,
+                    self._async_local_poll,
+                    timedelta(seconds=LOCAL_POLL_INTERVAL_SECONDS),
+                )
+            )
+            # Prime immediately rather than waiting a full interval.
+            self._coordinator.hass.async_create_task(self._async_local_poll())
+
+        return self._device_state.get("sov_status", {}).get("v")
+
+    async def async_open_valve(self) -> None:
+        """Open the shutoff valve, preferring the local path."""
+        await self._async_set_valve(True)
+
+    async def async_close_valve(self) -> None:
+        """Close the shutoff valve, preferring the local path."""
+        await self._async_set_valve(False)
+
+    async def _async_set_valve(self, open_valve: bool) -> None:
+        """Actuate the valve locally when possible, falling back to cloud."""
+        if self._local_client is not None and self._local_active:
+            try:
+                await self._local_client.set_valve_state(open_valve)
+                LOGGER.debug(
+                    "Valve %s command sent locally to %s",
+                    "open" if open_valve else "close",
+                    self._local_host,
+                )
+                return
+            except JnapError as err:
+                LOGGER.warning(
+                    "Local valve command to %s failed (%s); falling back to cloud",
+                    self._local_host,
+                    err,
+                )
+        if open_valve:
+            await self._coordinator.api_client.device.open_valve(self._phyn_device_id)
+        else:
+            await self._coordinator.api_client.device.close_valve(self._phyn_device_id)
+
+    @staticmethod
+    def _local_number(value: Any) -> float | None:
+        """Coerce a JNAP/WASP attribute value into a float if possible."""
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return None
+        return None
+
+    async def _async_local_poll(self, now: Any = None) -> None:
+        """Poll the device's local JNAP API and merge telemetry into state."""
+        if self._local_client is None:
+            return
+        try:
+            output = await self._local_client.get_attributes()
+        except JnapError as err:
+            self._local_failures += 1
+            if self._local_failures == LOCAL_FAILURE_THRESHOLD:
+                LOGGER.warning(
+                    "Local polling for %s at %s is failing (%s); "
+                    "relying on cloud until it recovers",
+                    self._phyn_device_id,
+                    self._local_host,
+                    err,
+                )
+                self._local_active = False
+                self._write_entity_states()
+            return
+
+        was_active = self._local_active
+        self._local_failures = 0
+        self._local_active = True
+        if not was_active:
+            LOGGER.info(
+                "Local JNAP polling active for %s at %s",
+                self._phyn_device_id,
+                self._local_host,
+            )
+
+        await self._apply_local_attributes(output)
+
+    async def _apply_local_attributes(self, output: dict[str, Any]) -> None:
+        """Map a JNAP ``attribute/get`` dump onto the cloud state schema."""
+        product = output.get("product", {})
+        stats = output.get("stats", {})
+        if not isinstance(product, dict):
+            product = {}
+        if not isinstance(stats, dict):
+            stats = {}
+
+        update_data: dict[str, Any] = {}
+
+        pressure = self._local_number(product.get("sensor_pressure_1"))
+        if pressure is not None:
+            update_data["pressure"] = {"v": pressure}
+
+        temperature = self._local_number(product.get("sensor_temperature_1"))
+        if temperature is not None:
+            update_data["temperature"] = {"v": temperature}
+
+        flow = self._local_number(product.get("sensor_flow"))
+        if flow is not None:
+            update_data["flow"] = {"v": flow}
+
+        flow_state = product.get("sensor_flow_state")
+        if isinstance(flow_state, str) and flow_state:
+            update_data["flow_state"] = {"v": flow_state}
+
+        sov_state = product.get("sov_state_str")
+        if isinstance(sov_state, str) and sov_state:
+            update_data["sov_status"] = {"v": sov_state}
+
+        consumption = self._local_number(product.get("consumption_total"))
+        if consumption is not None:
+            update_data["consumption"] = math.floor(consumption * 100) / 100
+
+        rssi = self._local_number(stats.get("wifi_sta_rssi"))
+        if rssi is not None:
+            update_data["signal_strength"] = rssi
+
+        if not update_data:
+            LOGGER.debug(
+                "Local attribute dump for %s had no mappable fields", self._phyn_device_id
+            )
+            return
+
+        async with self._state_lock:
+            self._device_state.update(update_data)
+            # Mirror what the MQTT push handler maintains so entities that
+            # read the realtime dict (flow state, consumption) stay in sync.
+            if "flow_state" in update_data:
+                self._rt_device_state["flow_state"] = update_data["flow_state"]
+            if "consumption" in update_data:
+                self._rt_device_state["consumption"] = {"v": update_data["consumption"]}
+            # Refresh the throttle stamp: while local polling is healthy the
+            # cloud state endpoint does not need to be hit every cycle.
+            self._device_state["last_updated"] = math.floor(time.time())
+            self._update_last_known_valve_state()
+
+        self._write_entity_states()
+
+    def _write_entity_states(self) -> None:
+        """Push current state to all initialized entities."""
+        for entity in self.entities:
+            if getattr(entity, "hass", None) is None:
+                continue
+            entity.async_write_ha_state()
     
     @property
     def autoshutoff_enabled(self) -> bool | None:
@@ -381,8 +604,4 @@ class PhynPlusDevice(PhynDevice):
                 self._update_last_known_valve_state()
                 LOGGER.debug("Updating device %s Device State: %s", self._phyn_device_id, self._device_state)
 
-            for entity in self.entities:
-                # Skip entities that aren't fully initialized yet
-                if getattr(entity, "hass", None) is None:
-                    continue
-                entity.async_write_ha_state()
+            self._write_entity_states()

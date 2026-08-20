@@ -1,4 +1,4 @@
-"""Switch representing the shutoff valve for the Phyn integration."""
+"""Binary sensor platform for the Phyn integration."""
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
@@ -13,7 +13,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Phyn switches from config entry."""
+    """Set up the Phyn binary sensors from config entry."""
     coordinator = hass.data[PHYN_DOMAIN]["coordinator"]
     entities = []
     for device in coordinator.devices:

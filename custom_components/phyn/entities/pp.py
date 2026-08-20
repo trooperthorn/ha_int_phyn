@@ -1,6 +1,7 @@
 """PP-specific entity classes for Phyn Plus devices."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.binary_sensor import (
@@ -12,6 +13,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.components.valve import (
     ValveDeviceClass,
     ValveEntity,
@@ -43,10 +45,10 @@ class PhynAutoShutoffModeSwitch(PhynSwitchEntity):
 
     @property
     def icon(self) -> str:
-        """Return the icon to use for the away mode."""
+        """Return the icon reflecting whether automatic shutoff protection is active."""
         if self.is_on:
-            return "mdi:bag-suitcase"
-        return "mdi:home-circle"
+            return "mdi:shield-check"
+        return "mdi:shield-off"
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the preference."""
@@ -167,10 +169,77 @@ class PhynScheduledLeakTestEnabledSwitch(PhynSwitchEntity):
 
     @property
     def icon(self) -> str:
-        """Return the icon to use for the away mode."""
+        """Return the icon reflecting whether the nightly leak test is scheduled."""
         if self.is_on:
-            return "mdi:bag-suitcase"
-        return "mdi:home-circle"
+            return "mdi:calendar-check"
+        return "mdi:calendar-remove"
+
+
+class PhynLocalConnectivitySensor(PhynEntity, BinarySensorEntity):
+    """Reports whether local (LAN) JNAP polling of the device is healthy.
+
+    Only created when a local host is configured for the device. Always
+    available so the local-down state can be observed and alerted on.
+    """
+
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    _device: PhynPlusDevice
+
+    def __init__(self, device: PhynPlusDevice) -> None:
+        """Initialize the local connectivity sensor."""
+        super().__init__("local_connection", "Local Connection", device)
+
+    @property
+    def available(self) -> bool:
+        """Always available so the local-down state itself is visible."""
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        """Return True while local polling is delivering data."""
+        return self._device.local_active
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the configured host for troubleshooting."""
+        return {"host": self._device.local_host}
+
+
+class PhynLatestLeakTestSensor(PhynEntity, SensorEntity):
+    """Timestamp of the most recent leak (health) test, with result details.
+
+    Attributes expose the raw scalar fields of the latest test (result flags,
+    pressure-drop figures, initiator, duration, …) so automations can react to
+    a failed or warning leak test without scraping the Phyn app.
+    """
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    _device: PhynPlusDevice
+
+    def __init__(self, device: PhynPlusDevice) -> None:
+        """Initialize the latest leak test sensor."""
+        super().__init__("last_leak_test", "Last Leak Test", device)
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return when the most recent leak test finished."""
+        return self._device.last_leak_test_time
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the scalar details of the latest leak test."""
+        test = self._device._latest_health_test
+        if not test:
+            return None
+        return {
+            key: value
+            for key, value in test.items()
+            if isinstance(value, (str, int, float, bool))
+        }
 
 
 class PhynConsumptionSensor(PhynEntity, SensorEntity):
@@ -231,42 +300,36 @@ class PhynValve(PhynEntity, ValveEntity):
         self._attr_supported_features = ValveEntityFeature(ValveEntityFeature.OPEN | ValveEntityFeature.CLOSE)
         self._attr_device_class = ValveDeviceClass.WATER
         self._attr_reports_position = False
-        self._last_known_state: bool = False
 
     async def async_open_valve(self) -> None:
-        """Open the valve."""
-        await self._device.coordinator.api_client.device.open_valve(self._device.id)
+        """Open the valve (local-first with cloud fallback)."""
+        await self._device.async_open_valve()
 
     def open_valve(self) -> None:
         """Open the valve."""
         raise NotImplementedError()
 
     async def async_close_valve(self) -> None:
-        """Close the valve."""
-        await self._device.coordinator.api_client.device.close_valve(self._device.id)
+        """Close the valve (local-first with cloud fallback)."""
+        await self._device.async_close_valve()
 
     def close_valve(self) -> None:
         """Close valve."""
         raise NotImplementedError()
 
     @property
-    def _attr_is_closed(self) -> bool | None:
-        """ Is the valve closed """
+    def is_closed(self) -> bool | None:
+        """Return True if the valve is closed."""
         if self._device.valve_open is None:
             return None
-        self._last_known_state = self._device.valve_open
         return not self._device.valve_open
 
     @property
-    def _attr_is_opening(self) -> bool:
-        """ Is the valve opening """
-        if self._device.valve_changing and self._device._last_known_valve_state is False:
-            return True
-        return False
+    def is_opening(self) -> bool:
+        """Return True if the valve is transitioning from closed to open."""
+        return self._device.valve_changing and self._device._last_known_valve_state is False
 
     @property
-    def _attr_is_closing(self) -> bool:
-        """ Is the valve closing """
-        if self._device.valve_changing and self._device._last_known_valve_state is True:
-            return True
-        return False
+    def is_closing(self) -> bool:
+        """Return True if the valve is transitioning from open to closed."""
+        return self._device.valve_changing and self._device._last_known_valve_state is True

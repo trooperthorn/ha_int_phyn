@@ -22,9 +22,12 @@ from .base import PhynDevice
 from ..entities.base import (
     PhynAlertEvent,
     PhynAlertSensor,
+    PhynConnectivitySensor,
     PhynFirwmwareUpdateEntity,
     PhynHumiditySensor,
+    PhynSignalStrengthSensor,
     PhynTemperatureSensor,
+    PhynTimestampSensor,
 )
 from ..entities.pw import PhynBatterySensor
 from ..const import DOMAIN, LOGGER
@@ -75,9 +78,12 @@ class PhynWaterSensorDevice(PhynDevice):
             PhynAlertSensor(self, "low_temperature_alert", "Low Temperature Alert", "low_temperature"),
             PhynAlertSensor(self, "water_detected_alert", "Water Detected Alert", "water_detected"),
             self._battery_entity,
+            PhynConnectivitySensor(self),
             PhynFirwmwareUpdateEntity(self),
             self._humidity_entity,
+            PhynSignalStrengthSensor(self),
             self._temperature_entity,
+            PhynTimestampSensor(self, "last_reading", "Last Reading", "last_reading_time"),
         ]
 
     @property
@@ -154,6 +160,19 @@ class PhynWaterSensorDevice(PhynDevice):
         if key in alerts:
             return alerts.get(key)
         return None
+
+    @property
+    def last_reading_time(self) -> datetime | None:
+        """Return when the sensor last reported a reading, as UTC.
+
+        Battery-powered PW1 pucks report infrequently; a stale timestamp here
+        is the earliest sign of a dead battery or a sensor that dropped off
+        WiFi, so automations can watch this instead of waiting for the device
+        to be flagged offline.
+        """
+        if not self._last_statistics_ts:
+            return None
+        return dt_util.utc_from_timestamp(self._last_statistics_ts)
 
     async def async_update_data(self):
         """Update data via library."""
@@ -309,5 +328,34 @@ class PhynWaterSensorDevice(PhynDevice):
             )
 
     async def async_setup(self) -> None:
-        """Async setup not needed"""
-        pass
+        """Subscribe to real-time cloud pushes for this sensor.
+
+        PW1 pucks are battery powered and only phone home when they have
+        something to say (water detected, threshold crossed, periodic
+        check-in). Subscribing to the device's app-subscription topic lets a
+        push trigger an immediate coordinator refresh instead of waiting for
+        the next poll — turning leak detection latency from up-to-a-minute
+        into a couple of seconds.
+        """
+        await self._coordinator.api_client.mqtt.add_event_handler(
+            "update", self.on_device_update
+        )
+        await self._coordinator.api_client.mqtt.subscribe(
+            f"prd/app_subscriptions/{self._phyn_device_id}"
+        )
+
+    async def on_device_update(self, device_id: str, data: dict) -> None:
+        """Handle a real-time MQTT push for this sensor.
+
+        The push payload schema for PW1 devices is not documented, so rather
+        than guessing at field mappings the payload is logged and a prompt
+        full refresh is requested (with the state-fetch throttle bypassed) so
+        alerts and readings are pulled through the well-understood REST path
+        within seconds.
+        """
+        if device_id != self._phyn_device_id:
+            return
+        LOGGER.debug("PW1 %s push update: %s", device_id, data)
+        # Bypass the 60s state-fetch throttle so the refresh is not a no-op.
+        self._device_state.pop("last_updated", None)
+        await self._coordinator.async_request_refresh()

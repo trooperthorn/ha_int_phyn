@@ -17,7 +17,12 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 
-from .const import DOMAIN as PHYN_DOMAIN, LOGGER
+from .const import (
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_UPDATE_INTERVAL,
+    DOMAIN as PHYN_DOMAIN,
+    LOGGER,
+)
 
 
 from .devices.pc import PhynClassicDevice
@@ -34,12 +39,18 @@ class PhynDataUpdateCoordinator(DataUpdateCoordinator[None]):
         hass: HomeAssistant,
         api_client: API,
         config_entry: ConfigEntry,
-        update_interval: timedelta = timedelta(seconds=60),
+        update_interval: timedelta | None = None,
     ) -> None:
         """Initialize the device."""
         self.hass: HomeAssistant = hass
         self.api_client: API = api_client
         self.config_entry: ConfigEntry = config_entry
+        if update_interval is None:
+            update_interval = timedelta(
+                seconds=config_entry.options.get(
+                    CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+                )
+            )
         self._devices: list[PhynDevice] = []
         self._alert_active_summary: dict = {}
         self._alert_latest_by_home: dict[str, list[dict]] = {}

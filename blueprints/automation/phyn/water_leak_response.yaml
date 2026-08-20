@@ -1,0 +1,73 @@
+blueprint:
+  name: "Phyn: Water leak response"
+  description: >
+    Respond to a detected water leak: optionally close the Phyn shutoff valve,
+    then run your notification actions.
+
+
+    Works with any moisture/problem binary sensors — pick the Phyn sensors that
+    matter to you: the Phyn Plus **Leak Alert**, **Pinhole Leak Alert** (small
+    leaks), **Recurring Flow Alert**, and **Offline Leak Shutoff Alert**
+    sensors, and each Phyn Smart Water Sensor's **Water Detected Alert**.
+    Third-party moisture sensors can be mixed in freely.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_phyn/blob/main/blueprints/automation/phyn/water_leak_response.yaml
+  input:
+    leak_sensors:
+      name: Leak sensors
+      description: >
+        Binary sensors that indicate a leak. Suggested: Phyn "Leak Alert",
+        "Pinhole Leak Alert", "Water Detected Alert" entities.
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+          multiple: true
+    close_valve:
+      name: Close the shutoff valve
+      description: Close the selected valve(s) when a leak is detected.
+      default: true
+      selector:
+        boolean:
+    valve_entity:
+      name: Shutoff valve(s)
+      description: The Phyn shutoff valve(s) to close.
+      default: []
+      selector:
+        entity:
+          filter:
+            - integration: phyn
+              domain: valve
+          multiple: true
+    actions:
+      name: Notification and follow-up actions
+      description: >
+        Actions to run after the valve step — send a notification, flash
+        lights, announce on a speaker, etc.
+      default: []
+      selector:
+        action:
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input leak_sensors
+    from: "off"
+    to: "on"
+
+variables:
+  close_valve: !input close_valve
+  valve_entity: !input valve_entity
+
+actions:
+  - if:
+      - condition: template
+        value_template: "{{ close_valve and valve_entity | count > 0 }}"
+    then:
+      - action: valve.close_valve
+        target:
+          entity_id: !input valve_entity
+        continue_on_error: true
+  - sequence: !input actions

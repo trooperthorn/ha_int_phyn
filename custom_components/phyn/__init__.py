@@ -1,6 +1,7 @@
 """The phyn integration."""
 import asyncio
 import logging
+from datetime import timedelta
 
 from aiophyn import async_get_api
 from aiophyn.errors import AuthenticationError, RequestError
@@ -10,20 +11,72 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+import homeassistant.helpers.config_validation as cv
 
-from .const import CLIENT, DOMAIN, CONF_HOME_ID, CONF_DEVICE_IDS
+from .const import (
+    CLIENT,
+    DOMAIN,
+    CONF_HOME_ID,
+    CONF_DEVICE_IDS,
+    CONF_LOCAL_HOSTS,
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_UPDATE_INTERVAL,
+)
 from .update_coordinator import PhynDataUpdateCoordinator
 from .exceptions import HaAuthError, HaCannotConnect
-from .services import phyn_leak_test_service_setup
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.SENSOR, Platform.SWITCH, Platform.UPDATE, Platform.VALVE]
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the Phyn domain: register services once, independent of entries."""
+    await async_setup_services(hass)
+    return True
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Apply option changes.
+
+    Excluded alert types are read live on every update cycle and the polling
+    interval is pushed into the running coordinator directly; a change to the
+    local (LAN) host mapping needs a reload so per-device local pollers and
+    entities are rebuilt.
+    """
+    coordinator: PhynDataUpdateCoordinator | None = hass.data.get(DOMAIN, {}).get(
+        "coordinator"
+    )
+    if coordinator is None:
+        return
+
+    new_hosts: dict = entry.options.get(CONF_LOCAL_HOSTS, {})
+    for device in coordinator.devices:
+        if not hasattr(device, "local_host"):
+            continue
+        if (new_hosts.get(device.id) or None) != device.local_host:
+            _LOGGER.info(
+                "Local host configuration changed for %s; reloading Phyn", device.id
+            )
+            hass.config_entries.async_schedule_reload(entry.entry_id)
+            return
+
+    new_interval = timedelta(
+        seconds=entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+    )
+    if coordinator.update_interval != new_interval:
+        coordinator.update_interval = new_interval
+        _LOGGER.debug("Phyn polling interval changed to %s", new_interval)
+        await coordinator.async_request_refresh()
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
@@ -191,7 +244,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_setup()
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-        await phyn_leak_test_service_setup(hass)
+
+        entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
         return True
     except Exception:

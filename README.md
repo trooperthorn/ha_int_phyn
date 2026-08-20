@@ -2,16 +2,20 @@
 
 Home Assistant custom component for interfacing with [Phyn](https://www.phyn.com) Smart Water Assistant and Kohler H2Wise+ by Phyn.
 
-The integration's [IoT class is Cloud Polling](https://www.home-assistant.io/blog/2016/02/12/classifying-the-internet-of-things/#classifiers), meaning the Home Assistant integration with this device happens via the Phyn cloud service. As such it requires an active internet connection to see updates and make changes, and Home Assistant polls the cloud service periodically for new state.
+The integration's IoT class is **Cloud Push**: state changes for the Phyn Plus arrive in realtime over the Phyn cloud's MQTT feed, with periodic cloud polling for alerts, consumption, and preferences. In addition, **optional local (LAN) access** is supported for the Phyn Plus — telemetry polling and valve control that keep working during an internet outage. See [LOCAL_ACCESS.md](LOCAL_ACCESS.md) for the research and architecture.
 
 This integration currently provides the following capabilities:
 
-- Daily water usage (compatible with Energy dashboard)
-- Average water temperature, pressure, and flow (realtime not available)
-- Shutoff valve control
-- Away mode control
-- Autoshutoff control
-- Scheduled Leak Test activation control
+- **Local device access for the Phyn Plus** (optional): direct LAN telemetry every 10 seconds and local valve control with automatic cloud fallback
+- Realtime water flow, pressure, temperature, and valve state (cloud MQTT push and/or local polling)
+- Daily and total water usage (compatible with the Energy/Water dashboard)
+- Shutoff valve control (`valve` entity; local-first when configured)
+- Leak testing: on-demand leak test action, leak test running/warning/leak-detected sensors, last-leak-test timestamp with full result details, scheduled leak test control
+- Alert binary sensors (leak, pinhole leak, recurring flow, freeze warning, high pressure, battery, temperature, humidity, water detected) and an **Alert event entity** for automations
+- Phyn Smart Water Sensor (PW1) support: water detected, humidity, air temperature, battery, last-reading timestamp — with realtime push so leak events arrive in seconds
+- Away mode and auto-shutoff control, including a timed **pause auto shutoff** action
+- Diagnostics: per-device connectivity (cloud + local), WiFi signal strength, downloadable diagnostics report
+- Automation **blueprints** for leak response, freeze protection, prolonged water running, and livestock water supply watch
 
 # Installation via HACS
 
@@ -23,7 +27,7 @@ This custom component can be integrated into [HACS](https://github.com/hacs/inte
 
 3. Click the three dots in the upper right-hand corner and select _Custom Repositories_.
 
-4. Paste "https://github.com/jordanruthe/homeassistant-phyn" into _Repository_, select "Integration" as _Category_, and click Add.
+4. Paste "https://github.com/trooperthorn/ha_int_phyn" into _Repository_, select "Integration" as _Category_, and click Add.
 
 5. Close the Custom repositories dialog after it updates with the new integration.
 
@@ -38,6 +42,63 @@ Configuration is done via the UI. Add the "Phyn" integration via the Integration
 * Search for and select "Phyn".
 
 * A prompt will appear for you to enter your Phyn Account username and password. (This could sometimes take 2-3 minutes, or longer).
+
+## Options
+
+Open **Settings → Devices & services → Phyn → Configure** to set:
+
+- **Suppress these alert types** — alert types that should never fire the Alert event entity.
+- **Cloud polling interval** — how often the Phyn cloud is polled (30–600 s, default 60 s). Realtime state arrives over push regardless; polling covers alerts, consumption, and preferences.
+- **Local IP per Phyn Plus** — enables direct LAN access for that device (see below).
+
+# Local device access (Phyn Plus)
+
+The Phyn Plus exposes an (unofficial) local HTTP API on your LAN. When a local IP is configured, this integration:
+
+- polls telemetry (flow, pressure, temperature, valve state, total consumption, WiFi signal) directly from the device every 10 seconds,
+- sends **valve open/close commands locally first**, falling back to the cloud — so leak-response automations keep working during an internet outage,
+- reduces cloud API load while local polling is healthy,
+- exposes a **Local Connection** diagnostic sensor so you can alert if local access drops.
+
+To enable it, either:
+
+1. **Automatic:** when Home Assistant sees the Phyn Plus request a DHCP lease (MAC prefix `28:F5:37`), the integration verifies the device's identity over the local API and stores its IP automatically — including after the device's IP changes.
+2. **Manual:** enter the device's IP in **Configure → Local IP for …**. The integration verifies the address answers as *that* Phyn device before saving.
+
+A DHCP reservation for the Phyn Plus in your router is recommended. Local access is verified on PP2 hardware (firmware 4.9.x); PP1 owners are welcome to try it and report results. PW1 water sensor pucks have no local interface (battery devices — cloud only), but their cloud push subscription delivers leak events within seconds. Full research notes: [LOCAL_ACCESS.md](LOCAL_ACCESS.md).
+
+To check which of your devices answer locally, run the bundled probe from any machine on the same network (requires only Python 3.11+):
+
+```bash
+python3 scripts/jnap_probe.py 192.168.1.24 192.168.1.25 <other-ips...>
+```
+
+It reports device identity, valve state, and live telemetry for every IP that speaks Phyn's local protocol, without changing any device state.
+
+# Actions (services)
+
+| Action | Description |
+|---|---|
+| `phyn.leak_test` | Start an on-demand leak (health) test on the targeted Phyn Plus. Field `extended: true` runs the longer test. Supports response data. |
+| `phyn.pause_autoshutoff` | Temporarily disable automatic shutoff (30 s / 1 h / 6 h / 24 h / until re-enabled) — e.g. while filling a pool or running irrigation. |
+| `phyn.mark_alert_read` | Mark a Phyn alert as read in the Phyn app after an automation has handled it. The alert ID comes with each Alert event. |
+
+All actions accept normal Home Assistant targets (entity, device, or area) where applicable.
+
+# Automation blueprints
+
+Ready-made blueprints live in [`blueprints/automation/phyn/`](blueprints/automation/phyn/). Import them via **Settings → Automations & scenes → Blueprints → Import blueprint** using the buttons below:
+
+| Blueprint | Import |
+|---|---|
+| **Water leak response** — close the valve and notify when any leak/moisture sensor trips | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Fwater_leak_response.yaml) |
+| **Freeze protection** — act on low temperature from any sensor (e.g. a Davis WeatherLink outdoor sensor) or Phyn freeze alerts | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Ffreeze_protection.yaml) |
+| **Prolonged water running** — alert when water has been flowing continuously too long | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Fprolonged_water_running.yaml) |
+| **Livestock water supply watch** — alert when a supply line animals depend on has had no flow for too long (optionally gated to freezing weather) | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Flivestock_water_watch.yaml) |
+
+# Diagnostics
+
+Every Phyn device exposes diagnostic entities (Online, Local Connection when configured, Signal Strength, Last Leak Test / Last Reading timestamps), and the integration supports Home Assistant's **Download diagnostics** (Settings → Devices & services → Phyn → ⋮ → Download diagnostics) with credentials and location data redacted.
 
 # Translations
 

@@ -1,0 +1,83 @@
+blueprint:
+  name: "Phyn: Prolonged water running"
+  description: >
+    Notify (and optionally shut the water off) when water has been flowing
+    continuously for longer than expected — a running toilet, a hose left on,
+    or an irrigation valve stuck open.
+
+
+    Watches the Phyn Plus **Current water flow rate** sensor.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_phyn/blob/main/blueprints/automation/phyn/prolonged_water_running.yaml
+  input:
+    flow_sensor:
+      name: Water flow rate sensor
+      description: The Phyn Plus "Current water flow rate" sensor.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+              device_class: volume_flow_rate
+    min_flow:
+      name: Flow threshold
+      description: >
+        Flow above this rate (in the sensor's unit, e.g. gpm) counts as
+        "running". Keep slightly above zero to ignore metering noise.
+      default: 0.2
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 0.1
+          mode: box
+    duration:
+      name: Continuous running time
+      description: How long water must run continuously before alerting.
+      default:
+        minutes: 30
+      selector:
+        duration:
+    close_valve:
+      name: Close the shutoff valve
+      description: Also close the selected valve(s) when triggered.
+      default: false
+      selector:
+        boolean:
+    valve_entity:
+      name: Shutoff valve(s)
+      default: []
+      selector:
+        entity:
+          filter:
+            - integration: phyn
+              domain: valve
+          multiple: true
+    actions:
+      name: Notification and follow-up actions
+      default: []
+      selector:
+        action:
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: numeric_state
+    entity_id: !input flow_sensor
+    above: !input min_flow
+    for: !input duration
+
+variables:
+  close_valve: !input close_valve
+  valve_entity: !input valve_entity
+
+actions:
+  - if:
+      - condition: template
+        value_template: "{{ close_valve and valve_entity | count > 0 }}"
+    then:
+      - action: valve.close_valve
+        target:
+          entity_id: !input valve_entity
+        continue_on_error: true
+  - sequence: !input actions

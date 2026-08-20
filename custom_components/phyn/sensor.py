@@ -13,7 +13,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the Flo sensors from config entry."""
+    """Set up the Phyn sensors from config entry."""
     coordinator = hass.data[PHYN_DOMAIN]["coordinator"]
     entities = []
     for device in coordinator.devices:

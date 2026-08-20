@@ -2,6 +2,8 @@
     "config": {
         "abort": {
             "already_configured": "Device is already configured",
+            "local_host_configured": "Local network access for the discovered Phyn Plus was configured automatically.",
+            "not_phyn_local": "The discovered device does not answer as a Phyn device on the local network.",
             "reconfigure_successful": "Phyn was reconfigured successfully."
         },
         "error": {
@@ -71,6 +73,12 @@
             },
             "leak_test_warning": {
                 "name": "Leak Test Warning"
+            },
+            "local_connection": {
+                "name": "Local Connection"
+            },
+            "online": {
+                "name": "Online"
             }
         },
         "event": {
@@ -97,6 +105,12 @@
             "humidity": {
                 "name": "Humidity"
             },
+            "last_leak_test": {
+                "name": "Last Leak Test"
+            },
+            "last_reading": {
+                "name": "Last Reading"
+            },
             "pressure": {
                 "name": "Current water pressure"
             },
@@ -105,6 +119,9 @@
             },
             "pressure2": {
                 "name": "Average cold water pressure"
+            },
+            "signal_strength": {
+                "name": "Signal Strength"
             },
             "temperature": {
                 "name": "Current water temperature"
@@ -144,33 +161,66 @@
     "exceptions": {
         "auth_failed": {
             "message": "Authentication failed. Please reauthenticate."
+        },
+        "leak_test_failed": {
+            "message": "The Phyn API rejected the leak test request for {device}."
+        },
+        "no_phyn_plus_target": {
+            "message": "The target does not include a Phyn Plus device. This action requires a device with a shutoff valve."
+        },
+        "no_target": {
+            "message": "No target was provided. Target a Phyn device, entity, or area."
+        },
+        "not_loaded": {
+            "message": "The Phyn integration is not loaded."
         }
     },
     "options": {
+        "error": {
+            "local_host_mismatch": "A device answered, but it is not this Phyn device. Check which IP belongs to which device.",
+            "local_host_unreachable": "No Phyn device answered at this address. Check the IP and that the device is on the same network."
+        },
         "step": {
             "init": {
                 "data": {
-                    "excluded_alert_types": "Suppress these alert types"
+                    "excluded_alert_types": "Suppress these alert types",
+                    "update_interval": "Cloud polling interval (seconds)"
                 },
-                "description": "Choose which alert types should be suppressed and never fire a Home Assistant event.",
-                "title": "Phyn Alert Options"
+                "description": "Choose which alert types should be suppressed, how often the Phyn cloud is polled, and optionally a local network IP address per Phyn Plus for direct LAN access (faster updates, valve control that works during internet outages). Leave an IP field empty to disable local access for that device.",
+                "title": "Phyn Options"
             }
         }
     },
     "services": {
         "leak_test": {
-            "description": "Starts a leak test for a phyn smart valve",
+            "description": "Starts an on-demand leak (health) test on the targeted Phyn Plus device(s).",
             "fields": {
-                "entity_id": {
-                    "description": "Valve to run leak test from",
-                    "name": "Valve"
-                },
                 "extended": {
-                    "description": "Extended leak test",
-                    "name": "Extended Test"
+                    "description": "Run the longer, more sensitive version of the leak test.",
+                    "name": "Extended test"
                 }
             },
             "name": "Start a leak test"
+        },
+        "mark_alert_read": {
+            "description": "Marks a Phyn alert as read in the Phyn app, e.g. after an automation has handled it. The alert ID is provided by the Alert event entity.",
+            "fields": {
+                "alert_id": {
+                    "description": "The ID of the alert to mark as read.",
+                    "name": "Alert ID"
+                }
+            },
+            "name": "Mark alert as read"
+        },
+        "pause_autoshutoff": {
+            "description": "Temporarily disables automatic water shutoff on the targeted Phyn Plus device(s), for example while running sprinklers or filling a pool.",
+            "fields": {
+                "duration": {
+                    "description": "How long automatic shutoff should stay paused. It re-enables automatically afterwards.",
+                    "name": "Duration"
+                }
+            },
+            "name": "Pause auto shutoff"
         }
     }
 }

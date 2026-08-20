@@ -1,0 +1,97 @@
+blueprint:
+  name: "Phyn: Livestock / animal water supply watch"
+  description: >
+    Alert when NO water has flowed for an unusually long time on a supply line
+    that animals depend on — an early sign of a frozen, blocked, empty, or
+    failed livestock waterer or trough float valve.
+
+
+    Watches the Phyn Plus **Current water flow rate** sensor on the supply
+    line. An optional temperature sensor (e.g. an outdoor sensor from a Davis
+    WeatherLink station) gates the alert to freezing conditions, when a dry
+    line most likely means frozen pipes; leave it empty to alert on any
+    prolonged no-flow period.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_phyn/blob/main/blueprints/automation/phyn/livestock_water_watch.yaml
+  input:
+    flow_sensor:
+      name: Water flow rate sensor
+      description: The Phyn Plus "Current water flow rate" sensor on the animals' supply line.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+              device_class: volume_flow_rate
+    max_flow:
+      name: No-flow threshold
+      description: Flow at or below this rate (in the sensor's unit) counts as "no water moving".
+      default: 0.05
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 0.05
+          mode: box
+    idle_duration:
+      name: Maximum quiet period
+      description: >
+        How long the line may sit with no flow before alerting. Size this to
+        your animals' normal drinking rhythm (e.g. 6–12 hours).
+      default:
+        hours: 12
+      selector:
+        duration:
+    temperature_sensor:
+      name: Outdoor temperature sensor (optional)
+      description: >
+        If set together with the temperature condition below, the alert only
+        fires when the temperature is below the threshold (frozen-line watch).
+      default: []
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+              device_class: temperature
+          multiple: true
+    freeze_threshold:
+      name: Temperature threshold
+      description: >
+        Used only when a temperature sensor is selected: alert only when the
+        temperature is below this value (in the sensor's unit).
+      default: 34
+      selector:
+        number:
+          min: -40
+          max: 120
+          step: 0.5
+          mode: box
+    actions:
+      name: Notification and follow-up actions
+      default: []
+      selector:
+        action:
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: numeric_state
+    entity_id: !input flow_sensor
+    below: !input max_flow
+    for: !input idle_duration
+
+variables:
+  temperature_sensor: !input temperature_sensor
+  freeze_threshold: !input freeze_threshold
+
+conditions:
+  - condition: template
+    value_template: >
+      {% if temperature_sensor | count == 0 %}
+        true
+      {% else %}
+        {{ states(temperature_sensor[0]) | float(999) < freeze_threshold | float }}
+      {% endif %}
+
+actions:
+  - sequence: !input actions

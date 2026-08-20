@@ -8,6 +8,12 @@ from homeassistant import config_entries, core, exceptions
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+)
+from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 from .const import (
     DOMAIN,
@@ -15,6 +21,18 @@ from .const import (
     ALL_ALERT_TYPES,
     CONF_EXCLUDED_ALERT_TYPES,
     CONF_DEVICE_IDS,
+    CONF_LOCAL_HOSTS,
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_UPDATE_INTERVAL,
+    MAX_UPDATE_INTERVAL,
+    MIN_UPDATE_INTERVAL,
+)
+from .jnap import (
+    JnapConnectionError,
+    JnapError,
+    JnapProtocolError,
+    async_verify_device,
+    normalize_mac,
 )
 
 DATA_SCHEMA = vol.Schema({
@@ -107,6 +125,61 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry):
         """Return the options flow handler."""
         return PhynOptionsFlow(config_entry)
+
+    async def async_step_dhcp(self, discovery_info: DhcpServiceInfo):
+        """Handle a DHCP-discovered Phyn Plus (MAC OUI 28:F5:37).
+
+        If the device belongs to an already-configured account, verify its
+        local JNAP endpoint and store/refresh the device's local host so
+        local access follows IP changes automatically. Otherwise verify it
+        really is a Phyn device (the OUI is a shared IEEE block) and offer
+        account setup.
+        """
+        mac = normalize_mac(discovery_info.macaddress)
+        host = discovery_info.ip
+        LOGGER.debug("DHCP discovery: mac=%s host=%s", mac, host)
+
+        # De-duplicate concurrent discovery flows for the same device.
+        await self.async_set_unique_id(f"phyn_local_{mac}")
+
+        for entry in self._async_current_entries(include_ignore=False):
+            device_ids: list[str] = entry.data.get(CONF_DEVICE_IDS, [])
+            matched = next(
+                (d for d in device_ids if normalize_mac(d) == mac), None
+            )
+            if matched is None:
+                continue
+            current_hosts: dict = entry.options.get(CONF_LOCAL_HOSTS, {})
+            if current_hosts.get(matched) == host:
+                return self.async_abort(reason="already_configured")
+            try:
+                await async_verify_device(host, expected_device_id=matched)
+            except JnapError as err:
+                LOGGER.debug(
+                    "Discovered %s at %s but JNAP verification failed: %s",
+                    mac, host, err,
+                )
+                return self.async_abort(reason="not_phyn_local")
+            self.hass.config_entries.async_update_entry(
+                entry,
+                options={
+                    **entry.options,
+                    CONF_LOCAL_HOSTS: {**current_hosts, matched: host},
+                },
+            )
+            LOGGER.info(
+                "Local access for Phyn device %s auto-configured at %s", matched, host
+            )
+            return self.async_abort(reason="local_host_configured")
+
+        # Unknown device: confirm it speaks Phyn JNAP before prompting for
+        # account setup, so random devices in the shared OUI block don't
+        # generate discovery noise.
+        try:
+            await async_verify_device(host)
+        except JnapError:
+            return self.async_abort(reason="not_phyn_local")
+        return await self.async_step_user()
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step (credentials)."""
@@ -243,25 +316,122 @@ class CannotConnect(exceptions.HomeAssistantError):
 
 
 class PhynOptionsFlow(config_entries.OptionsFlow):
-    """Handle Phyn integration options (e.g. suppressed alert types)."""
+    """Handle Phyn integration options.
+
+    Covers suppressed alert types, the cloud polling interval, and per-device
+    local (LAN) hosts for Phyn Plus devices.
+    """
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
         self._config_entry = config_entry
+        #: Maps the human-readable local-host form field key -> phyn device id.
+        self._local_field_map: dict[str, str] = {}
+
+    def _local_capable_devices(self) -> list:
+        """Return the coordinator's Phyn Plus devices (local-capable)."""
+        coordinator = self.hass.data.get(DOMAIN, {}).get("coordinator")
+        if coordinator is None:
+            return []
+        return [
+            device
+            for device in coordinator.devices
+            if device.product_code in ("PP1", "PP2")
+        ]
+
+    def _build_schema(self, user_input: dict | None = None) -> vol.Schema:
+        """Build the options schema, including per-device local host fields.
+
+        When re-showing the form after a validation error, *user_input*
+        pre-populates the fields so the user's entries are not lost.
+        """
+        submitted = user_input or {}
+        current_excluded = submitted.get(
+            CONF_EXCLUDED_ALERT_TYPES,
+            self._config_entry.options.get(CONF_EXCLUDED_ALERT_TYPES, []),
+        )
+        current_interval = submitted.get(
+            CONF_UPDATE_INTERVAL,
+            self._config_entry.options.get(
+                CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+            ),
+        )
+        current_hosts: dict = self._config_entry.options.get(CONF_LOCAL_HOSTS, {})
+
+        fields: dict = {
+            vol.Optional(
+                CONF_EXCLUDED_ALERT_TYPES,
+                default=current_excluded,
+            ): cv.multi_select(ALL_ALERT_TYPES),
+            vol.Optional(
+                CONF_UPDATE_INTERVAL,
+                default=current_interval,
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=MIN_UPDATE_INTERVAL,
+                    max=MAX_UPDATE_INTERVAL,
+                    step=10,
+                    unit_of_measurement="s",
+                    mode=NumberSelectorMode.BOX,
+                )
+            ),
+        }
+
+        # Human-readable keys double as field labels (HA falls back to the raw
+        # key when no translation exists) — same pattern as the device step.
+        self._local_field_map = {}
+        for device in self._local_capable_devices():
+            key = f"Local IP for {device.device_name} ({device.id[-4:]})"
+            self._local_field_map[key] = device.id
+            current = submitted.get(key, current_hosts.get(device.id, ""))
+            fields[vol.Optional(key, default=current)] = str
+
+        return vol.Schema(fields)
 
     async def async_step_init(self, user_input=None):
         """Manage options."""
+        errors: dict[str, str] = {}
+
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-
-        current_excluded = self._config_entry.options.get(CONF_EXCLUDED_ALERT_TYPES, [])
-
-        schema = vol.Schema(
-            {
-                vol.Optional(
-                    CONF_EXCLUDED_ALERT_TYPES,
-                    default=current_excluded,
-                ): cv.multi_select(ALL_ALERT_TYPES),
+            # Start from the stored mapping so hosts for devices that were not
+            # shown in this form (e.g. integration not loaded) are preserved.
+            shown_ids = set(self._local_field_map.values())
+            local_hosts: dict[str, str] = {
+                device_id: host
+                for device_id, host in self._config_entry.options.get(
+                    CONF_LOCAL_HOSTS, {}
+                ).items()
+                if device_id not in shown_ids
             }
+            for field_key, device_id in self._local_field_map.items():
+                host = (user_input.get(field_key) or "").strip()
+                if not host:
+                    continue
+                try:
+                    await async_verify_device(host, expected_device_id=device_id)
+                except JnapConnectionError:
+                    errors[field_key] = "local_host_unreachable"
+                except JnapProtocolError:
+                    errors[field_key] = "local_host_mismatch"
+                else:
+                    local_hosts[device_id] = host
+
+            if not errors:
+                return self.async_create_entry(
+                    title="",
+                    data={
+                        CONF_EXCLUDED_ALERT_TYPES: user_input.get(
+                            CONF_EXCLUDED_ALERT_TYPES, []
+                        ),
+                        CONF_UPDATE_INTERVAL: int(
+                            user_input.get(
+                                CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+                            )
+                        ),
+                        CONF_LOCAL_HOSTS: local_hosts,
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="init", data_schema=self._build_schema(user_input), errors=errors
         )
-        return self.async_show_form(step_id="init", data_schema=schema)

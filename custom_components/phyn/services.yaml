@@ -1,12 +1,42 @@
 leak_test:
+  target:
+    entity:
+      integration: phyn
+      domain: valve
   fields:
-    entity_id:
-      required: true
-      selector:
-        entity:
-          domain: valve
     extended:
-      required: true
+      required: false
       default: false
       selector:
         boolean:
+
+pause_autoshutoff:
+  target:
+    entity:
+      integration: phyn
+      domain: valve
+  fields:
+    duration:
+      required: false
+      default: "indefinite"
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - label: "30 seconds"
+              value: "30s"
+            - label: "1 hour"
+              value: "1h"
+            - label: "6 hours"
+              value: "6h"
+            - label: "24 hours"
+              value: "24h"
+            - label: "Until re-enabled"
+              value: "indefinite"
+
+mark_alert_read:
+  fields:
+    alert_id:
+      required: true
+      selector:
+        text:

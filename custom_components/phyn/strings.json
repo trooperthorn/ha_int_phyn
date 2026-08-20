@@ -31,27 +31,48 @@
     },
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
-      "reconfigure_successful": "Phyn was reconfigured successfully."
+      "reconfigure_successful": "Phyn was reconfigured successfully.",
+      "local_host_configured": "Local network access for the discovered Phyn Plus was configured automatically.",
+      "not_phyn_local": "The discovered device does not answer as a Phyn device on the local network."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Phyn Alert Options",
-        "description": "Choose which alert types should be suppressed and never fire a Home Assistant event.",
+        "title": "Phyn Options",
+        "description": "Choose which alert types should be suppressed, how often the Phyn cloud is polled, and optionally a local network IP address per Phyn Plus for direct LAN access (faster updates, valve control that works during internet outages). Leave an IP field empty to disable local access for that device.",
         "data": {
-          "excluded_alert_types": "Suppress these alert types"
+          "excluded_alert_types": "Suppress these alert types",
+          "update_interval": "Cloud polling interval (seconds)"
         }
       }
+    },
+    "error": {
+      "local_host_unreachable": "No Phyn device answered at this address. Check the IP and that the device is on the same network.",
+      "local_host_mismatch": "A device answered, but it is not this Phyn device. Check which IP belongs to which device."
     }
   },
   "exceptions": {
     "auth_failed": {
       "message": "Authentication failed. Please reauthenticate."
+    },
+    "not_loaded": {
+      "message": "The Phyn integration is not loaded."
+    },
+    "no_target": {
+      "message": "No target was provided. Target a Phyn device, entity, or area."
+    },
+    "no_phyn_plus_target": {
+      "message": "The target does not include a Phyn Plus device. This action requires a device with a shutoff valve."
+    },
+    "leak_test_failed": {
+      "message": "The Phyn API rejected the leak test request for {device}."
     }
   },
   "entity": {
     "binary_sensor": {
+      "online": { "name": "Online" },
+      "local_connection": { "name": "Local Connection" },
       "alert_battery": { "name": "Battery Alert" },
       "alert_freeze_warn": { "name": "Freeze Warning Alert" },
       "alert_high_pressure": { "name": "High Pressure Alert" },
@@ -78,7 +99,10 @@
       "water_flow_state": { "name": "Water Flowing" },
       "humidity": { "name": "Humidity" },
       "battery": { "name": "Battery" },
-      "air_temperature": { "name": "Air Temperature" }
+      "air_temperature": { "name": "Air Temperature" },
+      "signal_strength": { "name": "Signal Strength" },
+      "last_leak_test": { "name": "Last Leak Test" },
+      "last_reading": { "name": "Last Reading" }
     },
     "switch": {
       "autoshutoff_enabled": { "name": "Autoshutoff Enabled" },
@@ -98,15 +122,31 @@
   "services": {
     "leak_test": {
       "name": "Start a leak test",
-      "description": "Starts a leak test for a phyn smart valve",
+      "description": "Starts an on-demand leak (health) test on the targeted Phyn Plus device(s).",
       "fields": {
-        "entity_id": {
-          "name": "Valve",
-          "description": "Valve to run leak test from"
-        },
         "extended": {
-          "name": "Extended Test",
-          "description": "Extended leak test"
+          "name": "Extended test",
+          "description": "Run the longer, more sensitive version of the leak test."
+        }
+      }
+    },
+    "pause_autoshutoff": {
+      "name": "Pause auto shutoff",
+      "description": "Temporarily disables automatic water shutoff on the targeted Phyn Plus device(s), for example while running sprinklers or filling a pool.",
+      "fields": {
+        "duration": {
+          "name": "Duration",
+          "description": "How long automatic shutoff should stay paused. It re-enables automatically afterwards."
+        }
+      }
+    },
+    "mark_alert_read": {
+      "name": "Mark alert as read",
+      "description": "Marks a Phyn alert as read in the Phyn app, e.g. after an automation has handled it. The alert ID is provided by the Alert event entity.",
+      "fields": {
+        "alert_id": {
+          "name": "Alert ID",
+          "description": "The ID of the alert to mark as read."
         }
       }
     }

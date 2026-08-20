@@ -28,3 +28,19 @@ ALL_ALERT_TYPES: dict[str, str] = {
 CONF_EXCLUDED_ALERT_TYPES = "excluded_alert_types"
 CONF_HOME_ID = "home_id"
 CONF_DEVICE_IDS = "device_ids"
+
+# Cloud polling cadence (seconds). Real-time state arrives over MQTT push;
+# polling covers alerts, preferences and consumption, so it can be relaxed
+# on metered/slow connections or tightened for faster alert pickup.
+CONF_UPDATE_INTERVAL = "update_interval"
+DEFAULT_UPDATE_INTERVAL = 60
+MIN_UPDATE_INTERVAL = 30
+MAX_UPDATE_INTERVAL = 600
+
+# Local (LAN) access to Phyn Plus devices over the JNAP protocol.
+# Maps phyn device_id -> IP/host on the local network. See LOCAL_ACCESS.md.
+CONF_LOCAL_HOSTS = "local_hosts"
+LOCAL_POLL_INTERVAL_SECONDS = 10
+# Consecutive local poll failures before falling back to cloud-only and
+# surfacing a warning (transient WiFi hiccups shouldn't flap the source).
+LOCAL_FAILURE_THRESHOLD = 3

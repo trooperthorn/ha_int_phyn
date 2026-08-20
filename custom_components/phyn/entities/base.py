@@ -1,9 +1,10 @@
 """Base entity class for Phyn entities."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.helpers.entity import DeviceInfo, Entity
+from homeassistant.helpers.entity import DeviceInfo, Entity, EntityCategory
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 
 from homeassistant.components.binary_sensor import (
@@ -24,6 +25,7 @@ from homeassistant.components.update import (
 )
 from homeassistant.const import (
     PERCENTAGE,
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     UnitOfPressure,
     UnitOfTemperature,
     UnitOfVolume,
@@ -244,6 +246,73 @@ class PhynSwitchEntity(PhynEntity, SwitchEntity):
         """Turn off the preference."""
         await self._device.set_device_preference(self._preference_name, "false")  # type: ignore[attr-defined]
         self.async_write_ha_state()
+
+class PhynConnectivitySensor(PhynEntity, BinarySensorEntity):
+    """Reports whether the device is currently connected to the Phyn cloud.
+
+    Deliberately always ``available`` — this entity's job is to report the
+    offline state that makes every other entity of the device unavailable.
+    """
+
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, device: PhynDevice) -> None:
+        """Initialize the connectivity sensor."""
+        super().__init__("online", "Online", device)
+
+    @property
+    def available(self) -> bool:
+        """Always available so the offline state itself can be observed."""
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        """Return True when the device is online with the Phyn cloud."""
+        return self._device.available
+
+
+class PhynSignalStrengthSensor(PhynEntity, SensorEntity):
+    """WiFi signal strength of the device (diagnostic, disabled by default)."""
+
+    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
+    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
+    _attr_state_class: SensorStateClass = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, device: PhynDevice) -> None:
+        """Initialize the signal strength sensor."""
+        super().__init__("signal_strength", "Signal Strength", device)
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the current RSSI reading."""
+        return self._device.rssi
+
+
+class PhynTimestampSensor(PhynEntity, SensorEntity):
+    """Generic timestamp sensor backed by a device property returning a datetime."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        device: PhynDevice,
+        name: str,
+        readable_name: str,
+        device_property: str,
+    ) -> None:
+        """Initialize the timestamp sensor."""
+        super().__init__(name, readable_name, device)
+        self._device_property: str = device_property
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the timestamp from the configured device property."""
+        return getattr(self._device, self._device_property, None)
+
 
 class PhynHumiditySensor(PhynEntity, SensorEntity):
     """Monitors the humidty."""

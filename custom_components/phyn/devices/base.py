@@ -118,9 +118,23 @@ class PhynDevice:
         return self._device_state.get("product_code", "")
 
     @property
+    def product_code(self) -> str:
+        """Return the product code the device was registered with."""
+        return self._product_code
+
+    @property
     def rssi(self) -> float | None:
-        """Return rssi for device."""
-        return self._device_state.get("signal_strength")
+        """Return rssi for device.
+
+        The API reports this either as a plain number or as a
+        ``{"v": <value>, "ts": <ts>}`` object depending on device/firmware.
+        """
+        value = self._device_state.get("signal_strength")
+        if isinstance(value, dict):
+            value = value.get("v")
+        if isinstance(value, (int, float)):
+            return value
+        return None
 
     @property
     def serial_number(self) -> str:

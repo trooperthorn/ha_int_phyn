@@ -4,3 +4,4 @@ pytest-homeassistant-custom-component>=0.13.316
 pytest-cov>=4.1.0
 aiophyn>=2026.6.4
 PySocks>=1.7.1
+PyYAML>=6.0

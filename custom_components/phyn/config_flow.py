@@ -22,9 +22,13 @@ from .const import (
     CONF_EXCLUDED_ALERT_TYPES,
     CONF_DEVICE_IDS,
     CONF_LOCAL_HOSTS,
+    CONF_LOCAL_POLL_INTERVAL,
     CONF_UPDATE_INTERVAL,
+    DEFAULT_LOCAL_POLL_INTERVAL,
     DEFAULT_UPDATE_INTERVAL,
+    MAX_LOCAL_POLL_INTERVAL,
     MAX_UPDATE_INTERVAL,
+    MIN_LOCAL_POLL_INTERVAL,
     MIN_UPDATE_INTERVAL,
 )
 from .jnap import (
@@ -356,6 +360,12 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
                 CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
             ),
         )
+        current_local_interval = submitted.get(
+            CONF_LOCAL_POLL_INTERVAL,
+            self._config_entry.options.get(
+                CONF_LOCAL_POLL_INTERVAL, DEFAULT_LOCAL_POLL_INTERVAL
+            ),
+        )
         current_hosts: dict = self._config_entry.options.get(CONF_LOCAL_HOSTS, {})
 
         fields: dict = {
@@ -371,6 +381,18 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
                     min=MIN_UPDATE_INTERVAL,
                     max=MAX_UPDATE_INTERVAL,
                     step=10,
+                    unit_of_measurement="s",
+                    mode=NumberSelectorMode.BOX,
+                )
+            ),
+            vol.Optional(
+                CONF_LOCAL_POLL_INTERVAL,
+                default=current_local_interval,
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=MIN_LOCAL_POLL_INTERVAL,
+                    max=MAX_LOCAL_POLL_INTERVAL,
+                    step=1,
                     unit_of_measurement="s",
                     mode=NumberSelectorMode.BOX,
                 )
@@ -426,6 +448,12 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
                         CONF_UPDATE_INTERVAL: int(
                             user_input.get(
                                 CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+                            )
+                        ),
+                        CONF_LOCAL_POLL_INTERVAL: int(
+                            user_input.get(
+                                CONF_LOCAL_POLL_INTERVAL,
+                                DEFAULT_LOCAL_POLL_INTERVAL,
                             )
                         ),
                         CONF_LOCAL_HOSTS: local_hosts,

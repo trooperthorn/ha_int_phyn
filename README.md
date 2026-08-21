@@ -49,6 +49,7 @@ Open **Settings → Devices & services → Phyn → Configure** to set:
 
 - **Suppress these alert types** — alert types that should never fire the Alert event entity.
 - **Cloud polling interval** — how often the Phyn cloud is polled (30–600 s, default 60 s). Realtime state arrives over push regardless; polling covers alerts, consumption, and preferences.
+- **Local polling interval** — how often a locally-connected Phyn Plus is polled over the LAN (5–60 s, default 10 s).
 - **Local IP per Phyn Plus** — enables direct LAN access for that device (see below).
 
 # Local device access (Phyn Plus)

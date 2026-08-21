@@ -79,3 +79,35 @@ def test_flow_state_falls_back_to_device_state():
     device = make_device()
     device._device_state["flow_state"] = {"v": "low"}
     assert flow_state_entity(device).native_value == "low"
+
+
+def test_last_push_time():
+    device = make_device()
+    assert device.last_push_time is None
+    device._last_push_ts = 1_755_000_000.0
+    assert device.last_push_time is not None
+    assert device.last_push_time.timestamp() == 1_755_000_000.0
+
+
+def test_state_throttle_follows_update_interval():
+    from datetime import timedelta
+
+    device = make_device()
+    device._coordinator.update_interval = timedelta(seconds=30)
+    assert device._state_throttle_seconds == 30
+    device._coordinator.update_interval = timedelta(seconds=300)
+    assert device._state_throttle_seconds == 60
+    device._coordinator.update_interval = None
+    assert device._state_throttle_seconds == 60
+
+
+def test_local_poll_interval_from_options():
+    from unittest.mock import MagicMock
+
+    from custom_components.phyn.const import CONF_LOCAL_POLL_INTERVAL
+
+    coordinator = MagicMock()
+    coordinator.config_entry.options = {CONF_LOCAL_POLL_INTERVAL: 15}
+    device = PhynPlusDevice(coordinator, "home1", "28f537aabbcc", "PP2")
+    assert device.local_poll_interval == 15
+    assert make_device().local_poll_interval == 10

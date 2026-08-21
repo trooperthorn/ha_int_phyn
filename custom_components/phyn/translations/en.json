@@ -108,6 +108,9 @@
             "last_leak_test": {
                 "name": "Last Leak Test"
             },
+            "last_push": {
+                "name": "Last Realtime Update"
+            },
             "last_reading": {
                 "name": "Last Reading"
             },
@@ -184,6 +187,7 @@
             "init": {
                 "data": {
                     "excluded_alert_types": "Suppress these alert types",
+                    "local_poll_interval": "Local polling interval (seconds)",
                     "update_interval": "Cloud polling interval (seconds)"
                 },
                 "description": "Choose which alert types should be suppressed, how often the Phyn cloud is polled, and optionally a local network IP address per Phyn Plus for direct LAN access (faster updates, valve control that works during internet outages). Leave an IP field empty to disable local access for that device.",

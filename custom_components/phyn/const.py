@@ -40,7 +40,11 @@ MAX_UPDATE_INTERVAL = 600
 # Local (LAN) access to Phyn Plus devices over the JNAP protocol.
 # Maps phyn device_id -> IP/host on the local network. See LOCAL_ACCESS.md.
 CONF_LOCAL_HOSTS = "local_hosts"
-LOCAL_POLL_INTERVAL_SECONDS = 10
+# Local polling cadence (seconds), configurable in the options flow.
+CONF_LOCAL_POLL_INTERVAL = "local_poll_interval"
+DEFAULT_LOCAL_POLL_INTERVAL = 10
+MIN_LOCAL_POLL_INTERVAL = 5
+MAX_LOCAL_POLL_INTERVAL = 60
 # Consecutive local poll failures before falling back to cloud-only and
 # surfacing a warning (transient WiFi hiccups shouldn't flap the source).
 LOCAL_FAILURE_THRESHOLD = 3

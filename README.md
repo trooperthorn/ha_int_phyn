@@ -96,6 +96,13 @@ Ready-made blueprints live in [`blueprints/automation/phyn/`](blueprints/automat
 | **Prolonged water running** — alert when water has been flowing continuously too long | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Fprolonged_water_running.yaml) |
 | **Livestock water supply watch** — alert when a supply line animals depend on has had no flow for too long (optionally gated to freezing weather) | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Flivestock_water_watch.yaml) |
 
+# Sensor states after a restart
+
+A few Phyn Plus entities are fed by the **realtime feed** (cloud push or local polling), not the periodic cloud poll:
+
+- **Total Water Usage**, **Current water flow rate**, and **Water Flowing** show `unknown` after a Home Assistant restart until the first realtime update arrives — Phyn typically pushes one as soon as water actually moves. Configuring a **local IP** for the device (see above) removes this gap entirely: local polling fills them within ~10 seconds of startup and keeps them fresh even with no water running.
+- The **Alert** event entity showing `unknown` is normal Home Assistant behavior: an event entity's state is the timestamp of the last event it fired, so it stays `unknown` until the first alert after a restart. Automations triggering on it work regardless.
+
 # Diagnostics
 
 Every Phyn device exposes diagnostic entities (Online, Local Connection when configured, Signal Strength, Last Leak Test / Last Reading timestamps), and the integration supports Home Assistant's **Download diagnostics** (Settings → Devices & services → Phyn → ⋮ → Download diagnostics) with credentials and location data redacted.

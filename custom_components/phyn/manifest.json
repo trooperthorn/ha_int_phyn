@@ -14,6 +14,6 @@
   "requirements": [
     "aiophyn>=2026.6.4"
   ],
-  "version": "2026.08.20",
+  "version": "2026.08.21",
   "quality_scale": "platinum"
 }

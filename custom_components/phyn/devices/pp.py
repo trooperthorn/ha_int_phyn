@@ -160,10 +160,19 @@ class PhynPlusDevice(PhynDevice):
 
     @property
     def consumption(self) -> float | None:
-        """Return the current consumption for today in gallons."""
-        if "consumption" not in self._rt_device_state:
+        """Return the cumulative water consumption in gallons.
+
+        Populated by the realtime push feed, local polling, or (when present)
+        the REST state — whichever delivers first. Tolerates both the raw
+        ``{"v": ...}`` shape and an already-flattened number.
+        """
+        value: Any = self._device_state.get("consumption")
+        if isinstance(value, dict):
+            value = value.get("v")
+        if not isinstance(value, (int, float)):
             return None
-        return self._device_state.get("consumption")
+        # Round down to 2 decimal places (matches the app's display).
+        return math.floor(value * 100) / 100
 
     @property
     def consumption_today(self) -> float | None:
@@ -172,11 +181,17 @@ class PhynPlusDevice(PhynDevice):
 
     @property
     def current_flow_rate(self) -> float | None:
-        """Return current flow rate in gpm."""
+        """Return current flow rate in gpm.
+
+        The realtime feed reports ``{"v": ...}``; the REST state endpoint may
+        instead carry ``{"mean": ...}`` (like pressure/temperature), so both
+        are accepted to avoid sitting at unknown until the first push.
+        """
         flow = self._device_state.get("flow", {})
-        if "v" not in flow:
+        value = flow.get("v", flow.get("mean"))
+        if not isinstance(value, (int, float)):
             return None
-        return round(flow["v"], 3)
+        return round(value, 3)
 
     @property
     def current_psi(self) -> float:

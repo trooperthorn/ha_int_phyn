@@ -25,7 +25,9 @@ from .const import (
     CONF_HOME_ID,
     CONF_DEVICE_IDS,
     CONF_LOCAL_HOSTS,
+    CONF_LOCAL_POLL_INTERVAL,
     CONF_UPDATE_INTERVAL,
+    DEFAULT_LOCAL_POLL_INTERVAL,
     DEFAULT_UPDATE_INTERVAL,
 )
 from .update_coordinator import PhynDataUpdateCoordinator
@@ -60,12 +62,19 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
         return
 
     new_hosts: dict = entry.options.get(CONF_LOCAL_HOSTS, {})
+    new_local_interval = int(
+        entry.options.get(CONF_LOCAL_POLL_INTERVAL, DEFAULT_LOCAL_POLL_INTERVAL)
+    )
     for device in coordinator.devices:
-        if not hasattr(device, "local_host"):
+        if not hasattr(device, "local_host") or not hasattr(
+            device, "local_poll_interval"
+        ):
             continue
-        if (new_hosts.get(device.id) or None) != device.local_host:
+        if (new_hosts.get(device.id) or None) != device.local_host or (
+            device.local_host and new_local_interval != device.local_poll_interval
+        ):
             _LOGGER.info(
-                "Local host configuration changed for %s; reloading Phyn", device.id
+                "Local access configuration changed for %s; reloading Phyn", device.id
             )
             hass.config_entries.async_schedule_reload(entry.entry_id)
             return

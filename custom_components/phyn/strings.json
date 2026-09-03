@@ -43,7 +43,8 @@
         "description": "Choose which alert types should be suppressed, how often the Phyn cloud is polled, and optionally a local network IP address per Phyn Plus for direct LAN access (faster updates, valve control that works during internet outages). Leave an IP field empty to disable local access for that device.",
         "data": {
           "excluded_alert_types": "Suppress these alert types",
-          "update_interval": "Cloud polling interval (seconds)"
+          "update_interval": "Cloud polling interval (seconds)",
+          "local_poll_interval": "Local polling interval (seconds)"
         }
       }
     },
@@ -102,7 +103,8 @@
       "air_temperature": { "name": "Air Temperature" },
       "signal_strength": { "name": "Signal Strength" },
       "last_leak_test": { "name": "Last Leak Test" },
-      "last_reading": { "name": "Last Reading" }
+      "last_reading": { "name": "Last Reading" },
+      "last_push": { "name": "Last Realtime Update" }
     },
     "switch": {
       "autoshutoff_enabled": { "name": "Autoshutoff Enabled" },

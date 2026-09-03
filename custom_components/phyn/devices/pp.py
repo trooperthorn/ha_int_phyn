@@ -11,8 +11,9 @@ import homeassistant.util.dt as dt_util
 
 from ..const import (
     CONF_LOCAL_HOSTS,
+    CONF_LOCAL_POLL_INTERVAL,
+    DEFAULT_LOCAL_POLL_INTERVAL,
     LOCAL_FAILURE_THRESHOLD,
-    LOCAL_POLL_INTERVAL_SECONDS,
     LOGGER,
 )
 from ..jnap import JnapClient, JnapError
@@ -26,6 +27,7 @@ from ..entities.base import (
     PhynPressureSensor,
     PhynSignalStrengthSensor,
     PhynTemperatureSensor,
+    PhynTimestampSensor,
 )
 from ..entities.pp import (
     PhynAutoShutoffModeSwitch,
@@ -102,6 +104,12 @@ class PhynPlusDevice(PhynDevice):
         )
         self._local_active: bool = False
         self._local_failures: int = 0
+        self._local_poll_interval: int = int(
+            coordinator.config_entry.options.get(
+                CONF_LOCAL_POLL_INTERVAL, DEFAULT_LOCAL_POLL_INTERVAL
+            )
+        )
+        self._last_push_ts: float | None = None
 
         self.entities = [
             PhynAlertEvent(self),
@@ -130,6 +138,7 @@ class PhynPlusDevice(PhynDevice):
             PhynSignalStrengthSensor(self),
             PhynTemperatureSensor(self, "temperature", NAME_WATER_TEMPERATURE),
             PhynPressureSensor(self, "pressure", NAME_WATER_PRESSURE),
+            PhynTimestampSensor(self, "last_push", "Last Realtime Update", "last_push_time"),
             PhynValve(self),
         ]
         if self._local_host:
@@ -160,10 +169,19 @@ class PhynPlusDevice(PhynDevice):
 
     @property
     def consumption(self) -> float | None:
-        """Return the current consumption for today in gallons."""
-        if "consumption" not in self._rt_device_state:
+        """Return the cumulative water consumption in gallons.
+
+        Populated by the realtime push feed, local polling, or (when present)
+        the REST state — whichever delivers first. Tolerates both the raw
+        ``{"v": ...}`` shape and an already-flattened number.
+        """
+        value: Any = self._device_state.get("consumption")
+        if isinstance(value, dict):
+            value = value.get("v")
+        if not isinstance(value, (int, float)):
             return None
-        return self._device_state.get("consumption")
+        # Round down to 2 decimal places (matches the app's display).
+        return math.floor(value * 100) / 100
 
     @property
     def consumption_today(self) -> float | None:
@@ -172,11 +190,17 @@ class PhynPlusDevice(PhynDevice):
 
     @property
     def current_flow_rate(self) -> float | None:
-        """Return current flow rate in gpm."""
+        """Return current flow rate in gpm.
+
+        The realtime feed reports ``{"v": ...}``; the REST state endpoint may
+        instead carry ``{"mean": ...}`` (like pressure/temperature), so both
+        are accepted to avoid sitting at unknown until the first push.
+        """
         flow = self._device_state.get("flow", {})
-        if "v" not in flow:
+        value = flow.get("v", flow.get("mean"))
+        if not isinstance(value, (int, float)):
             return None
-        return round(flow["v"], 3)
+        return round(value, 3)
 
     @property
     def current_psi(self) -> float:
@@ -288,6 +312,22 @@ class PhynPlusDevice(PhynDevice):
         """Return True while local (LAN) polling is healthy."""
         return self._local_active
 
+    @property
+    def local_poll_interval(self) -> int:
+        """Return the local polling interval (seconds) this device runs at."""
+        return self._local_poll_interval
+
+    @property
+    def last_push_time(self) -> datetime | None:
+        """Return when the last realtime (MQTT push) update arrived, as UTC.
+
+        Stays None until the first push after startup — the key signal when
+        debugging sensors that only the realtime feed populates.
+        """
+        if self._last_push_ts is None:
+            return None
+        return datetime.fromtimestamp(self._last_push_ts, tz=timezone.utc)
+
     async def async_setup(self) -> str | None:  # type: ignore[override]
         """Setup a new device coordinator"""
         LOGGER.debug("Setting up coordinator")
@@ -300,13 +340,13 @@ class PhynPlusDevice(PhynDevice):
                 "Starting local JNAP polling for %s at %s every %ss",
                 self._phyn_device_id,
                 self._local_host,
-                LOCAL_POLL_INTERVAL_SECONDS,
+                self._local_poll_interval,
             )
             self._coordinator.config_entry.async_on_unload(
                 async_track_time_interval(
                     self._coordinator.hass,
                     self._async_local_poll,
-                    timedelta(seconds=LOCAL_POLL_INTERVAL_SECONDS),
+                    timedelta(seconds=self._local_poll_interval),
                 )
             )
             # Prime immediately rather than waiting a full interval.
@@ -581,6 +621,7 @@ class PhynPlusDevice(PhynDevice):
 
     async def on_device_update(self, device_id, data):
         if device_id == self._phyn_device_id:
+            self._last_push_ts = time.time()
             async with self._state_lock:
                 self._rt_device_state = data
 

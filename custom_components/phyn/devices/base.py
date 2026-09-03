@@ -247,10 +247,22 @@ class PhynDevice:
                 except Exception as err:  # noqa: BLE001
                     LOGGER.error("Alert listener error for %s: %s", self._phyn_device_id, err)
 
+    @property
+    def _state_throttle_seconds(self) -> int:
+        """Seconds a state fetch is considered fresh.
+
+        Follows the configured coordinator polling interval (capped at 60 s)
+        so users who tighten polling below 60 s actually get a fetch on every
+        cycle instead of every other one.
+        """
+        interval = self._coordinator.update_interval
+        seconds = int(interval.total_seconds()) if interval else 60
+        return max(1, min(60, seconds))
+
     async def _update_device_state(self, *_) -> None:
         """Update the device state from the API."""
-        if 'last_updated' not in self._device_state or self._device_state['last_updated'] <= (math.floor(time.time()) - 60):
-            self._device_state.update(await self._coordinator.api_client.device.get_state( 
+        if 'last_updated' not in self._device_state or self._device_state['last_updated'] <= (math.floor(time.time()) - self._state_throttle_seconds):
+            self._device_state.update(await self._coordinator.api_client.device.get_state(
                 self._phyn_device_id
             ))
             self._device_state['last_updated'] = math.floor(time.time())

@@ -80,6 +80,7 @@ async def async_get_config_entry_diagnostics(
                 "rssi": device.rssi,
                 "local_configured": getattr(device, "local_host", None) is not None,
                 "local_active": getattr(device, "local_active", False),
+                "last_push_time": str(getattr(device, "last_push_time", None)),
                 "state": async_redact_data(device._device_state, TO_REDACT),
                 "preferences": async_redact_data(
                     device._device_preferences, TO_REDACT

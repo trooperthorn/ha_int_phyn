@@ -93,14 +93,24 @@ class PhynFlowState(PhynEntity, SensorEntity):
     _device: PhynPlusDevice
 
     def __init__(self, device: PhynPlusDevice) -> None:
-        """Initialize the daily water usage sensor."""
+        """Initialize the water flow state sensor."""
         super().__init__("water_flow_state", "Water Flowing", device)
         self._state: str | None = None
 
     @property
     def native_value(self) -> str | None:
-        if "flow_state" in self._device._rt_device_state:
-            return self._device._rt_device_state['flow_state']['v']
+        """Return the flow state (off/low/med/high).
+
+        Prefers the realtime push feed, falling back to the merged device
+        state (fed by local polling and, when present, the REST state) so the
+        sensor is not stuck at unknown until the first push arrives. Only
+        string values are reported — the initial numeric placeholder is not
+        a real state.
+        """
+        for source in (self._device._rt_device_state, self._device._device_state):
+            value = source.get("flow_state", {}).get("v")
+            if isinstance(value, str) and value:
+                return value
         return None
 
 

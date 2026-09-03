@@ -24,8 +24,9 @@ jobs:
         with:
           category: integration
           # HACS reads license metadata from the default branch, so feature
-          # branches skip that one check; main validates it.
-          ignore: ${{ github.ref != 'refs/heads/main' && 'license' || '' }}
+          # branches skip that one check; main validates it. Topics stays
+          # ignored, matching this repo's prior validation workflow.
+          ignore: ${{ github.ref != 'refs/heads/main' && 'license,topics' || 'topics' }}
 
   hassfest:
     name: hassfest (manifest sanity)

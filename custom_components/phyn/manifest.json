@@ -10,7 +10,6 @@
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/trooperthorn/ha_int_phyn/issues",
   "loggers": ["custom_components.phyn","aiophyn"],
-  "homeassistant": "2026.6.4",
   "requirements": [
     "aiophyn>=2026.6.4"
   ],

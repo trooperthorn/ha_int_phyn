@@ -3,6 +3,13 @@ pytest-asyncio>=0.21.0
 pytest-homeassistant-custom-component>=0.13.362
 homeassistant==2026.9.0
 pytest-cov>=4.1.0
-aiophyn>=2026.6.4
 PySocks>=1.7.1
 PyYAML>=6.0
+
+# aiophyn is intentionally not listed here. Its metadata pins
+# pycognito<2023.0.0, which conflicts with hass-nabucasa (pulled in by
+# homeassistant) pinning pycognito==2024.5.1. In practice aiophyn works
+# against the newer pycognito (every current Home Assistant install already
+# resolves it that way), so install aiophyn with --no-deps after this file:
+#   pip install -r requirements_test.txt
+#   pip install --no-deps aiophyn==2026.6.4

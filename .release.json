@@ -1,0 +1,8 @@
+{
+  "tag_prefix": "v",
+  "timezone": "America/Chicago",
+  "release_paths": ["custom_components/phyn"],
+  "version_fields": [
+    {"path": "custom_components/phyn/manifest.json", "kind": "json", "key": "version"}
+  ]
+}

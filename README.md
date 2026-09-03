@@ -4,6 +4,8 @@ Home Assistant custom component for interfacing with [Phyn](https://www.phyn.com
 
 The integration's IoT class is **Cloud Push**: state changes for the Phyn Plus arrive in realtime over the Phyn cloud's MQTT feed, with periodic cloud polling for alerts, consumption, and preferences. In addition, **optional local (LAN) access** is supported for the Phyn Plus — telemetry polling and valve control that keep working during an internet outage. See [LOCAL_ACCESS.md](LOCAL_ACCESS.md) for the research and architecture.
 
+See [docs/README.md](docs/README.md) for operational and troubleshooting notes.
+
 This integration currently provides the following capabilities:
 
 - **Local device access for the Phyn Plus** (optional): direct LAN telemetry every 10 seconds and local valve control with automatic cloud fallback

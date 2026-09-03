@@ -97,10 +97,7 @@ class PhynDataUpdateCoordinator(DataUpdateCoordinator[None]):
         except Exception as err:  # noqa: BLE001
             LOGGER.warning("Could not fetch alert active summary: %s", err)
 
-        # On the first poll use a large limit to seed _seen_alert_ids so that
-        # historical alerts are never replayed as "new" events on startup.
-        # On subsequent polls a small limit is sufficient — any alert created
-        # in the last 60 s will be at the top of the most-recent list.
+        # Fetch-limit difference is deliberate, see docs/operations.md.
         alert_limit = 50 if not self._alert_initial_fetch_done else 20
 
         home_ids = {device.home_id for device in self._devices}
@@ -157,10 +154,7 @@ class PhynDataUpdateCoordinator(DataUpdateCoordinator[None]):
 
         self._state_fetch_failures = 0
 
-        # As a last-resort, reload the config entry to rebuild the MQTT client from
-        # scratch.
-        # The threshold is intentionally high (~10 min at 60s intervals) because the
-        # reconnect loop should recover on its own well before this fires.
+        # Reload threshold is intentionally high, see docs/operations.md.
         mqtt = self.api_client.mqtt
         if mqtt.topics and not mqtt.is_connected():
             self._mqtt_down_cycles += 1

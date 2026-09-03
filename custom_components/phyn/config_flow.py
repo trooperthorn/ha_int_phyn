@@ -260,13 +260,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             else:
-                return self.async_update_reload_and_abort(
+                result = self.async_update_and_abort(
                     reauth_entry,
                     data_updates={
                         CONF_USERNAME: user_input[CONF_USERNAME],
                         CONF_PASSWORD: user_input[CONF_PASSWORD],
                     },
                 )
+                self.hass.config_entries.async_schedule_reload(reauth_entry.entry_id)
+                return result
 
         return self.async_show_form(
             step_id="reauth_confirm",
@@ -309,10 +311,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors=errors,
             )
 
-        return self.async_update_reload_and_abort(
+        result = self.async_update_and_abort(
             reconfigure_entry,
             data_updates={CONF_DEVICE_IDS: selected},
         )
+        self.hass.config_entries.async_schedule_reload(reconfigure_entry.entry_id)
+        return result
 
 
 class CannotConnect(exceptions.HomeAssistantError):

@@ -1,24 +1,24 @@
 """Support for Phyn Water Sensors."""
 from __future__ import annotations
 
+from asyncio import timeout
 from collections import defaultdict
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from aiophyn.errors import RequestError
-
 from homeassistant.components.recorder.statistics import (
     StatisticData,
     StatisticMeanType,
     StatisticMetaData,
     async_add_external_statistics,
 )
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.helpers.update_coordinator import UpdateFailed
-from homeassistant.components.sensor import SensorDeviceClass
-from homeassistant.util import dt as dt_util, slugify
-from asyncio import timeout
+from homeassistant.util import dt as dt_util
+from homeassistant.util import slugify
 
-from .base import PhynDevice
+from ..const import DOMAIN, LOGGER
 from ..entities.base import (
     PhynAlertEvent,
     PhynAlertSensor,
@@ -30,7 +30,7 @@ from ..entities.base import (
     PhynTimestampSensor,
 )
 from ..entities.pw import PhynBatterySensor
-from ..const import DOMAIN, LOGGER
+from .base import PhynDevice
 
 _DEVICE_CLASS_UNIT_CLASS: dict[SensorDeviceClass, str | None] = {
     SensorDeviceClass.TEMPERATURE: "temperature",
@@ -254,7 +254,7 @@ class PhynWaterSensorDevice(PhynDevice):
         hass = self._coordinator.hass
         device_slug = slugify(self._phyn_device_id)
 
-        metrics = [
+        metrics: list[tuple[str, str, SensorEntity, list[tuple[datetime, float]]]] = [
             (
                 "air_temperature",
                 "Air Temperature",
@@ -318,7 +318,11 @@ class PhynWaterSensorDevice(PhynDevice):
                 source=DOMAIN,
                 statistic_id=statistic_id,
                 unit_of_measurement=entity.native_unit_of_measurement,
-                unit_class=_DEVICE_CLASS_UNIT_CLASS.get(entity.device_class),
+                unit_class=(
+                    _DEVICE_CLASS_UNIT_CLASS.get(entity.device_class)
+                    if entity.device_class is not None
+                    else None
+                ),
             )
 
             async_add_external_statistics(hass, metadata, stat_data)

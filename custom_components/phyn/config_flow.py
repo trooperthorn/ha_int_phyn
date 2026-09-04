@@ -1,13 +1,12 @@
 """Config flow for phyn integration."""
+import homeassistant.helpers.config_validation as cv
+import voluptuous as vol
 from aiophyn import async_get_api
 from aiophyn.errors import RequestError
 from botocore.exceptions import ClientError
-import voluptuous as vol
-
 from homeassistant import config_entries, core, exceptions
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
@@ -16,16 +15,16 @@ from homeassistant.helpers.selector import (
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 from .const import (
-    DOMAIN,
-    LOGGER,
     ALL_ALERT_TYPES,
-    CONF_EXCLUDED_ALERT_TYPES,
     CONF_DEVICE_IDS,
+    CONF_EXCLUDED_ALERT_TYPES,
     CONF_LOCAL_HOSTS,
     CONF_LOCAL_POLL_INTERVAL,
     CONF_UPDATE_INTERVAL,
     DEFAULT_LOCAL_POLL_INTERVAL,
     DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
+    LOGGER,
     MAX_LOCAL_POLL_INTERVAL,
     MAX_UPDATE_INTERVAL,
     MIN_LOCAL_POLL_INTERVAL,
@@ -90,10 +89,7 @@ def _build_device_schema(homes: list[dict], current_device_ids: list[str] | None
         home_name = home.get("name", home["id"])
         device_map = {d["device_id"]: _device_label(d) for d in home["devices"]}
         all_ids = list(device_map.keys())
-        if current:
-            default_ids = [d for d in all_ids if d in current] or all_ids
-        else:
-            default_ids = all_ids
+        default_ids = ([d for d in all_ids if d in current] or all_ids) if current else all_ids
         fields[vol.Optional(home_name, default=default_ids)] = cv.multi_select(device_map)
     return vol.Schema(fields)
 
@@ -111,6 +107,11 @@ def _extract_device_ids(user_input: dict, homes: list[dict]) -> list[str]:
                 seen.add(device_id)
                 selected.append(device_id)
     return selected
+
+
+def _short_id(value: str) -> str:
+    """Return the last four characters of a device identifier for log lines."""
+    return value[-4:] if value else ""
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -141,7 +142,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """
         mac = normalize_mac(discovery_info.macaddress)
         host = discovery_info.ip
-        LOGGER.debug("DHCP discovery: mac=%s host=%s", mac, host)
+        LOGGER.debug("DHCP discovery for device ending %s", _short_id(mac))
 
         # De-duplicate concurrent discovery flows for the same device.
         await self.async_set_unique_id(f"phyn_local_{mac}")
@@ -160,8 +161,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await async_verify_device(host, expected_device_id=matched)
             except JnapError as err:
                 LOGGER.debug(
-                    "Discovered %s at %s but JNAP verification failed: %s",
-                    mac, host, err,
+                    "Discovered device ending %s but JNAP verification failed: %s",
+                    _short_id(mac), err,
                 )
                 return self.async_abort(reason="not_phyn_local")
             self.hass.config_entries.async_update_entry(
@@ -172,7 +173,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 },
             )
             LOGGER.info(
-                "Local access for Phyn device %s auto-configured at %s", matched, host
+                "Local access for Phyn device ending %s auto-configured", _short_id(matched)
             )
             return self.async_abort(reason="local_host_configured")
 

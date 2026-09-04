@@ -1,32 +1,12 @@
 """Support for Phyn Classic Water Monitor sensors."""
 from __future__ import annotations
+
+from asyncio import timeout
 from typing import TYPE_CHECKING, Any
 
-from aiophyn.errors import RequestError
-from asyncio import timeout
-
-from homeassistant.components.binary_sensor import (
-    BinarySensorDeviceClass,
-    BinarySensorEntity,
-)
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorEntity,
-    SensorStateClass,
-)
-from homeassistant.components.valve import (
-    ValveDeviceClass,
-    ValveEntity,
-    ValveEntityFeature
-)
-from homeassistant.const import (
-    UnitOfPressure,
-    UnitOfTemperature,
-    UnitOfVolume,
-)
-
-from homeassistant.helpers.update_coordinator import UpdateFailed
 import homeassistant.util.dt as dt_util
+from aiophyn.errors import RequestError
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from ..const import LOGGER
 from ..entities.base import (
@@ -35,8 +15,8 @@ from ..entities.base import (
     PhynDailyUsageSensor,
     PhynFirmwareUpdateAvailableSensor,
     PhynFirwmwareUpdateEntity,
-    PhynTemperatureSensor,
     PhynPressureSensor,
+    PhynTemperatureSensor,
 )
 from .base import PhynDevice
 

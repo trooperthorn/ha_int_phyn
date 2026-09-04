@@ -8,8 +8,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
-
 # Keys removed from state/preference dumps. Device IDs are kept (shortened)
 # because they are required to correlate diagnostics with debug logs.
 TO_REDACT = {

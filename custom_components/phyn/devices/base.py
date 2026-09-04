@@ -1,9 +1,11 @@
 """ Generic Phyn Device"""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable
+import contextlib
 import math
 import time
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from ..const import LOGGER
 
@@ -180,10 +182,8 @@ class PhynDevice:
         """
         self._alert_listeners.append(cb)
         def remove() -> None:
-            try:
+            with contextlib.suppress(ValueError):
                 self._alert_listeners.remove(cb)
-            except ValueError:
-                pass
         return remove
 
     async def _update_alerts(self, *_) -> None:

@@ -1,13 +1,16 @@
 """Support for Phyn Plus Water Monitor sensors."""
 from __future__ import annotations
+
+import math
+import time
+from asyncio import Lock, timeout
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+import homeassistant.util.dt as dt_util
 from aiophyn.errors import RequestError
-from asyncio import Lock, timeout
-
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import UpdateFailed
-import homeassistant.util.dt as dt_util
 
 from ..const import (
     CONF_LOCAL_HOSTS,
@@ -16,7 +19,6 @@ from ..const import (
     LOCAL_FAILURE_THRESHOLD,
     LOGGER,
 )
-from ..jnap import JnapClient, JnapError
 from ..entities.base import (
     PhynAlertEvent,
     PhynAlertSensor,
@@ -43,11 +45,8 @@ from ..entities.pp import (
     PhynScheduledLeakTestEnabledSwitch,
     PhynValve,
 )
+from ..jnap import JnapClient, JnapError
 from .base import PhynDevice
-
-from datetime import datetime, timedelta, timezone
-import math
-import time
 
 if TYPE_CHECKING:
     from ..update_coordinator import PhynDataUpdateCoordinator
@@ -230,7 +229,7 @@ class PhynPlusDevice(PhynDevice):
             return None
         if end_time > 1e12:  # milliseconds epoch
             end_time /= 1000
-        return datetime.fromtimestamp(end_time, tz=timezone.utc)
+        return datetime.fromtimestamp(end_time, tz=UTC)
 
     @property
     def temperature(self) -> float:
@@ -326,7 +325,7 @@ class PhynPlusDevice(PhynDevice):
         """
         if self._last_push_ts is None:
             return None
-        return datetime.fromtimestamp(self._last_push_ts, tz=timezone.utc)
+        return datetime.fromtimestamp(self._last_push_ts, tz=UTC)
 
     async def async_setup(self) -> str | None:  # type: ignore[override]
         """Setup a new device coordinator"""
@@ -502,10 +501,10 @@ class PhynPlusDevice(PhynDevice):
         """Return True if auto shutoff enabled"""
         if "auto_shutoff_enable" not in self._auto_shutoff:
             return None
-        return self._auto_shutoff["auto_shutoff_enable"] == True
+        return bool(self._auto_shutoff["auto_shutoff_enable"])
     
     async def set_autoshutoff_enabled(self, state: bool) -> None:
-        LOGGER.debug("Setting auto shutoff state: %s" % state)
+        LOGGER.debug("Setting auto shutoff state: %s", state)
         await self._coordinator.api_client.device.set_autoshutoff_enabled(self._phyn_device_id, state)
         self._auto_shutoff["auto_shutoff_enable"] = state
 
@@ -561,7 +560,7 @@ class PhynPlusDevice(PhynDevice):
     async def _update_autoshutoff(self, *_) -> None:
         """Update auto shutoff status"""
         data = await self._coordinator.api_client.device.get_autoshuftoff_status(self._phyn_device_id)
-        LOGGER.debug("Autoshutoff info: %s" % data)
+        LOGGER.debug("Autoshutoff info: %s", data)
         self._auto_shutoff.update(data)
     
     async def _update_away_mode(self, *_) -> None:
@@ -591,11 +590,11 @@ class PhynPlusDevice(PhynDevice):
         try: 
             data = await self._coordinator.api_client.device.get_health_tests(self._phyn_device_id)
         except Exception as error:
-            LOGGER.error("Error getting health tests: %s" % error)
+            LOGGER.error("Error getting health tests: %s", error)
             self._latest_health_test = None
             return
         latest_test = None
-        LOGGER.debug("Health data: %s" % data)
+        LOGGER.debug("Health data: %s", data)
         for test in data['data']:
             if latest_test is None or latest_test['end_time'] < test['end_time']:
                 latest_test = test

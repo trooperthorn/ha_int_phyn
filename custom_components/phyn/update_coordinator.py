@@ -1,33 +1,32 @@
 """Phyn device object."""
 from __future__ import annotations
 
+import contextlib
+from asyncio import timeout
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
-MQTT_DOWN_RELOAD_THRESHOLD = 10
-STATE_FETCH_FAILURE_THRESHOLD = 3  # ~3 min at 60s polls before surfacing UpdateFailed
-
 from aiophyn.api import API
 from aiophyn.errors import AuthenticationError, RequestError
-from asyncio import timeout
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-
 from .const import (
     CONF_UPDATE_INTERVAL,
     DEFAULT_UPDATE_INTERVAL,
-    DOMAIN as PHYN_DOMAIN,
     LOGGER,
 )
-
-
+from .const import (
+    DOMAIN as PHYN_DOMAIN,
+)
 from .devices.pc import PhynClassicDevice
 from .devices.pp import PhynPlusDevice
 from .devices.pw import PhynWaterSensorDevice
+
+MQTT_DOWN_RELOAD_THRESHOLD = 10
+STATE_FETCH_FAILURE_THRESHOLD = 3  # ~3 min at 60s polls before surfacing UpdateFailed
 
 if TYPE_CHECKING:
     from .devices.base import PhynDevice
@@ -203,10 +202,8 @@ class PhynDataUpdateCoordinator(DataUpdateCoordinator[None]):
                     """Clear the reload flag so a future threshold can retry."""
                     self._reload_in_progress = False
                     exc = None
-                    try:
+                    with contextlib.suppress(Exception):
                         exc = task.exception()
-                    except Exception:  # noqa: BLE001
-                        pass
                     if exc is not None:
                         LOGGER.warning(
                             "Phyn integration reload failed: %s — will retry after %s cycles",

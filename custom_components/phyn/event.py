@@ -1,11 +1,10 @@
 """Event platform for Phyn alerts."""
 from __future__ import annotations
 
+from homeassistant.components.event import EventEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.components.event import EventEntity
-
 
 
 async def async_setup_entry(

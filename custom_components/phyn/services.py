@@ -22,7 +22,7 @@ from homeassistant.helpers.target import (
     async_extract_referenced_entity_ids,
 )
 
-from .const import CLIENT, DOMAIN, LOGGER
+from .const import DOMAIN, LOGGER
 
 if TYPE_CHECKING:
     from .devices.pp import PhynPlusDevice
@@ -67,9 +67,12 @@ def _get_client_and_coordinator(
     hass: HomeAssistant,
 ) -> tuple[Any, PhynDataUpdateCoordinator]:
     """Return the API client and coordinator, or raise if not loaded."""
-    data = hass.data.get(DOMAIN, {})
-    client = data.get(CLIENT)
-    coordinator = data.get("coordinator")
+    client = coordinator = None
+    for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+        runtime = getattr(entry, "runtime_data", None)
+        if runtime is not None:
+            client, coordinator = runtime.client, runtime.coordinator
+            break
     if client is None or coordinator is None:
         raise ServiceValidationError(
             translation_domain=DOMAIN,

@@ -128,7 +128,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     def async_get_options_flow(config_entry):
         """Return the options flow handler."""
-        return PhynOptionsFlow(config_entry)
+        return PhynOptionsFlow()
 
     async def async_step_dhcp(self, discovery_info: DhcpServiceInfo):
         """Handle a DHCP-discovered Phyn Plus (MAC OUI 28:F5:37).
@@ -330,17 +330,17 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
     local (LAN) hosts for Phyn Plus devices.
     """
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+    def __init__(self) -> None:
         """Initialize options flow."""
-        self._config_entry = config_entry
-        #: Maps the human-readable local-host form field key -> phyn device id.
+        # Maps the local-host form field key to the phyn device id.
         self._local_field_map: dict[str, str] = {}
 
     def _local_capable_devices(self) -> list:
         """Return the coordinator's Phyn Plus devices (local-capable)."""
-        coordinator = self.hass.data.get(DOMAIN, {}).get("coordinator")
-        if coordinator is None:
+        runtime = getattr(self.config_entry, "runtime_data", None)
+        if runtime is None:
             return []
+        coordinator = runtime.coordinator
         return [
             device
             for device in coordinator.devices
@@ -356,21 +356,21 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
         submitted = user_input or {}
         current_excluded = submitted.get(
             CONF_EXCLUDED_ALERT_TYPES,
-            self._config_entry.options.get(CONF_EXCLUDED_ALERT_TYPES, []),
+            self.config_entry.options.get(CONF_EXCLUDED_ALERT_TYPES, []),
         )
         current_interval = submitted.get(
             CONF_UPDATE_INTERVAL,
-            self._config_entry.options.get(
+            self.config_entry.options.get(
                 CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
             ),
         )
         current_local_interval = submitted.get(
             CONF_LOCAL_POLL_INTERVAL,
-            self._config_entry.options.get(
+            self.config_entry.options.get(
                 CONF_LOCAL_POLL_INTERVAL, DEFAULT_LOCAL_POLL_INTERVAL
             ),
         )
-        current_hosts: dict = self._config_entry.options.get(CONF_LOCAL_HOSTS, {})
+        current_hosts: dict = self.config_entry.options.get(CONF_LOCAL_HOSTS, {})
 
         fields: dict = {
             vol.Optional(
@@ -424,7 +424,7 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
             shown_ids = set(self._local_field_map.values())
             local_hosts: dict[str, str] = {
                 device_id: host
-                for device_id, host in self._config_entry.options.get(
+                for device_id, host in self.config_entry.options.get(
                     CONF_LOCAL_HOSTS, {}
                 ).items()
                 if device_id not in shown_ids

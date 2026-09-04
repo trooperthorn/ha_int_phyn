@@ -1,7 +1,9 @@
 """The phyn integration."""
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import timedelta
+from typing import Any
 
 from aiophyn import async_get_api
 from aiophyn.errors import AuthenticationError, RequestError
@@ -20,7 +22,6 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 
 from .const import (
-    CLIENT,
     DOMAIN,
     CONF_HOME_ID,
     CONF_DEVICE_IDS,
@@ -33,6 +34,17 @@ from .const import (
 from .update_coordinator import PhynDataUpdateCoordinator
 from .exceptions import HaAuthError, HaCannotConnect
 from .services import async_setup_services
+
+
+@dataclass
+class PhynRuntimeData:
+    """Objects one loaded entry owns."""
+
+    client: Any
+    coordinator: PhynDataUpdateCoordinator
+
+
+type PhynConfigEntry = ConfigEntry[PhynRuntimeData]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,11 +67,10 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     local (LAN) host mapping needs a reload so per-device local pollers and
     entities are rebuilt.
     """
-    coordinator: PhynDataUpdateCoordinator | None = hass.data.get(DOMAIN, {}).get(
-        "coordinator"
-    )
-    if coordinator is None:
+    runtime = getattr(entry, "runtime_data", None)
+    if runtime is None:
         return
+    coordinator: PhynDataUpdateCoordinator = runtime.coordinator
 
     new_hosts: dict = entry.options.get(CONF_LOCAL_HOSTS, {})
     new_local_interval = int(
@@ -157,7 +168,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: PhynConfigEntry) -> bool:
     """Set up Phyn from a config entry."""
 
     username = entry.data.get(CONF_USERNAME, "")
@@ -175,11 +186,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return True
 
     session = async_get_clientsession(hass)
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN] = {}
     client_id = f"homeassistant-{hass.data['core.uuid']}-{entry.entry_id}"
     try:
-        hass.data[DOMAIN][CLIENT] = client = await async_get_api(
+        client = await async_get_api(
             entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD],
             phyn_brand="phyn", session=session,
             client_id=client_id
@@ -247,7 +256,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.warning(
                     "Selected device %s not found in account; skipping", device_id
                 )
-        hass.data[DOMAIN]["coordinator"] = coordinator
+        entry.runtime_data = PhynRuntimeData(client=client, coordinator=coordinator)
 
         await coordinator.async_refresh()
         await coordinator.async_setup()
@@ -267,19 +276,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: PhynConfigEntry) -> bool:
     """Unload a config entry."""
-    if CLIENT not in hass.data.get(DOMAIN, {}):
+    runtime = getattr(entry, "runtime_data", None)
+    if runtime is None:
         return True
-    client = hass.data[DOMAIN][CLIENT]
+    client = runtime.client
     try:
         await asyncio.wait_for(client.mqtt.disconnect_and_wait(), timeout=15)
     except TimeoutError:
         _LOGGER.warning(
             "Timed out waiting for MQTT disconnect during unload; proceeding anyway"
         )
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        del hass.data[DOMAIN][CLIENT]
-        del hass.data[DOMAIN]["coordinator"]
-    return unload_ok
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

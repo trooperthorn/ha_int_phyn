@@ -1,8 +1,4 @@
-# Static and dependency security checks on every push and pull request plus a
-# weekly run for new advisories. Each job is a required status check on main.
-# This repository has no frontend and no companion app, so the frontend
-# dependency audit, ShellCheck, and app image scan jobs from the generic
-# template are not present here.
+# Static security checks on every push, pull request, and weekly; see docs/operations.md.
 name: Security
 
 on:

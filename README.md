@@ -2,7 +2,7 @@
 
 Home Assistant custom component for interfacing with [Phyn](https://www.phyn.com) Smart Water Assistant and Kohler H2Wise+ by Phyn.
 
-The integration's IoT class is **Cloud Push**: state changes for the Phyn Plus arrive in realtime over the Phyn cloud's MQTT feed, with periodic cloud polling for alerts, consumption, and preferences. In addition, **optional local (LAN) access** is supported for the Phyn Plus — telemetry polling and valve control that keep working during an internet outage. See [LOCAL_ACCESS.md](LOCAL_ACCESS.md) for the research and architecture.
+The integration's IoT class is **Cloud Push**: state changes for the Phyn Plus arrive in realtime over the Phyn cloud's MQTT feed, with periodic cloud polling for alerts, consumption, and preferences. In addition, **optional local (LAN) access** is supported for the Phyn Plus, telemetry polling and valve control that keep working during an internet outage. See [LOCAL_ACCESS.md](LOCAL_ACCESS.md) for the research and architecture.
 
 See [docs/README.md](docs/README.md) for operational and troubleshooting notes.
 
@@ -14,7 +14,7 @@ This integration currently provides the following capabilities:
 - Shutoff valve control (`valve` entity; local-first when configured)
 - Leak testing: on-demand leak test action, leak test running/warning/leak-detected sensors, last-leak-test timestamp with full result details, scheduled leak test control
 - Alert binary sensors (leak, pinhole leak, recurring flow, freeze warning, high pressure, battery, temperature, humidity, water detected) and an **Alert event entity** for automations
-- Phyn Smart Water Sensor (PW1) support: water detected, humidity, air temperature, battery, last-reading timestamp — with realtime push so leak events arrive in seconds
+- Phyn Smart Water Sensor (PW1) support: water detected, humidity, air temperature, battery, last-reading timestamp, with realtime push so leak events arrive in seconds
 - Away mode and auto-shutoff control, including a timed **pause auto shutoff** action
 - Diagnostics: per-device connectivity (cloud + local), WiFi signal strength, downloadable diagnostics report
 - Automation **blueprints** for leak response, freeze protection, prolonged water running, and livestock water supply watch
@@ -49,26 +49,26 @@ Configuration is done via the UI. Add the "Phyn" integration via the Integration
 
 Open **Settings → Devices & services → Phyn → Configure** to set:
 
-- **Suppress these alert types** — alert types that should never fire the Alert event entity.
-- **Cloud polling interval** — how often the Phyn cloud is polled (30–600 s, default 60 s). Realtime state arrives over push regardless; polling covers alerts, consumption, and preferences.
-- **Local polling interval** — how often a locally-connected Phyn Plus is polled over the LAN (5–60 s, default 10 s).
-- **Local IP per Phyn Plus** — enables direct LAN access for that device (see below).
+- **Suppress these alert types**: alert types that should never fire the Alert event entity.
+- **Cloud polling interval**: how often the Phyn cloud is polled (30–600 s, default 60 s). Realtime state arrives over push regardless; polling covers alerts, consumption, and preferences.
+- **Local polling interval**: how often a locally-connected Phyn Plus is polled over the LAN (5–60 s, default 10 s).
+- **Local IP per Phyn Plus**: enables direct LAN access for that device (see below).
 
 # Local device access (Phyn Plus)
 
 The Phyn Plus exposes an (unofficial) local HTTP API on your LAN. When a local IP is configured, this integration:
 
 - polls telemetry (flow, pressure, temperature, valve state, total consumption, WiFi signal) directly from the device every 10 seconds,
-- sends **valve open/close commands locally first**, falling back to the cloud — so leak-response automations keep working during an internet outage,
+- sends **valve open/close commands locally first**, falling back to the cloud, so leak-response automations keep working during an internet outage,
 - reduces cloud API load while local polling is healthy,
 - exposes a **Local Connection** diagnostic sensor so you can alert if local access drops.
 
 To enable it, either:
 
-1. **Automatic:** when Home Assistant sees the Phyn Plus request a DHCP lease (MAC prefix `28:F5:37`), the integration verifies the device's identity over the local API and stores its IP automatically — including after the device's IP changes.
+1. **Automatic:** when Home Assistant sees the Phyn Plus request a DHCP lease (MAC prefix `28:F5:37`), the integration verifies the device's identity over the local API and stores its IP automatically, including after the device's IP changes.
 2. **Manual:** enter the device's IP in **Configure → Local IP for …**. The integration verifies the address answers as *that* Phyn device before saving.
 
-A DHCP reservation for the Phyn Plus in your router is recommended. Local access is verified on PP2 hardware (firmware 4.9.x); PP1 owners are welcome to try it and report results. PW1 water sensor pucks have no local interface (battery devices — cloud only), but their cloud push subscription delivers leak events within seconds. Full research notes: [LOCAL_ACCESS.md](LOCAL_ACCESS.md).
+A DHCP reservation for the Phyn Plus in your router is recommended. Local access is verified on PP2 hardware (firmware 4.9.x); PP1 owners are welcome to try it and report results. PW1 water sensor pucks have no local interface (battery devices, cloud only), but their cloud push subscription delivers leak events within seconds. Full research notes: [LOCAL_ACCESS.md](LOCAL_ACCESS.md).
 
 To check which of your devices answer locally, run the bundled probe from any machine on the same network (requires only Python 3.11+):
 
@@ -83,7 +83,7 @@ It reports device identity, valve state, and live telemetry for every IP that sp
 | Action | Description |
 |---|---|
 | `phyn.leak_test` | Start an on-demand leak (health) test on the targeted Phyn Plus. Field `extended: true` runs the longer test. Supports response data. |
-| `phyn.pause_autoshutoff` | Temporarily disable automatic shutoff (30 s / 1 h / 6 h / 24 h / until re-enabled) — e.g. while filling a pool or running irrigation. |
+| `phyn.pause_autoshutoff` | Temporarily disable automatic shutoff (30 s / 1 h / 6 h / 24 h / until re-enabled), e.g. while filling a pool or running irrigation. |
 | `phyn.mark_alert_read` | Mark a Phyn alert as read in the Phyn app after an automation has handled it. The alert ID comes with each Alert event. |
 
 All actions accept normal Home Assistant targets (entity, device, or area) where applicable.
@@ -94,16 +94,16 @@ Ready-made blueprints live in [`blueprints/automation/phyn/`](blueprints/automat
 
 | Blueprint | Import |
 |---|---|
-| **Water leak response** — close the valve and notify when any leak/moisture sensor trips | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Fwater_leak_response.yaml) |
-| **Freeze protection** — act on low temperature from any sensor (e.g. a Davis WeatherLink outdoor sensor) or Phyn freeze alerts | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Ffreeze_protection.yaml) |
-| **Prolonged water running** — alert when water has been flowing continuously too long | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Fprolonged_water_running.yaml) |
-| **Livestock water supply watch** — alert when a supply line animals depend on has had no flow for too long (optionally gated to freezing weather) | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Flivestock_water_watch.yaml) |
+| **Water leak response**, close the valve and notify when any leak/moisture sensor trips | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Fwater_leak_response.yaml) |
+| **Freeze protection**, act on low temperature from any sensor (e.g. a Davis WeatherLink outdoor sensor) or Phyn freeze alerts | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Ffreeze_protection.yaml) |
+| **Prolonged water running**, alert when water has been flowing continuously too long | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Fprolonged_water_running.yaml) |
+| **Livestock water supply watch**, alert when a supply line animals depend on has had no flow for too long (optionally gated to freezing weather) | [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ftrooperthorn%2Fha_int_phyn%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fphyn%2Flivestock_water_watch.yaml) |
 
 # Sensor states after a restart
 
 A few Phyn Plus entities are fed by the **realtime feed** (cloud push or local polling), not the periodic cloud poll:
 
-- **Total Water Usage**, **Current water flow rate**, and **Water Flowing** show `unknown` after a Home Assistant restart until the first realtime update arrives — Phyn typically pushes one as soon as water actually moves. Configuring a **local IP** for the device (see above) removes this gap entirely: local polling fills them within ~10 seconds of startup and keeps them fresh even with no water running.
+- **Total Water Usage**, **Current water flow rate**, and **Water Flowing** show `unknown` after a Home Assistant restart until the first realtime update arrives, Phyn typically pushes one as soon as water actually moves. Configuring a **local IP** for the device (see above) removes this gap entirely: local polling fills them within ~10 seconds of startup and keeps them fresh even with no water running.
 - The **Alert** event entity showing `unknown` is normal Home Assistant behavior: an event entity's state is the timestamp of the last event it fired, so it stays `unknown` until the first alert after a restart. Automations triggering on it work regardless.
 
 # Diagnostics
@@ -118,7 +118,7 @@ Translations for this integration are managed with [Weblate](https://weblate.org
 libre web-based continuous localization platform. Weblate generously provides free
 hosting for this project under its [Libre plan](https://weblate.org/hosting/).
 
-Want to help translate Phyn into your language? No GitHub account or coding required —
+Want to help translate Phyn into your language? No GitHub account or coding required -
 just head to the [Phyn project on Hosted Weblate](https://hosted.weblate.org/engage/homeassistant-phyn/)
 and start translating. Contributions are batched into pull requests automatically.
 
@@ -127,7 +127,7 @@ and start translating. Contributions are batched into pull requests automaticall
 For contributors: `strings.json` is the source of truth for the integration's English
 strings (config flow, entity names, service names) and may reference Home Assistant's
 shared strings via `[%key:...%]`. `translations/en.json` is the literal-English template
-Weblate translates from — it's generated, not hand-edited. After changing `strings.json`,
+Weblate translates from, it's generated, not hand-edited. After changing `strings.json`,
 regenerate it with:
 
 ```
@@ -140,7 +140,7 @@ overwritten on the next Weblate sync.
 
 # Tracking usage since a date (e.g. cistern fills)
 
-If you draw water from a cistern (or any fixed-capacity tank) and need to know how much has been used since the last fill — so you can trigger a "refill needed" notification — you can do this entirely with built-in Home Assistant helpers. No extra integration code is required.
+If you draw water from a cistern (or any fixed-capacity tank) and need to know how much has been used since the last fill, so you can trigger a "refill needed" notification, you can do this entirely with built-in Home Assistant helpers. No extra integration code is required.
 
 ## Which sensor to use
 
@@ -152,7 +152,7 @@ from the device's real-time MQTT feed. This is the best source for this use-case
 sensor (`sensor.<device>_daily_consumption`) instead. The `utility_meter` will accumulate
 daily totals across days without resetting automatically.
 
-## Step 1 — Create a utility_meter helper
+## Step 1: Create a utility_meter helper
 
 Add the following to your `configuration.yaml` (adjust the `source` entity ID to match
 your actual device):
@@ -169,13 +169,13 @@ showing gallons used since the meter was last reset.
 
 > **Tip:** Find your exact entity ID in **Settings → Devices & services → Phyn → entities**.
 
-## Step 2 — Record the fill date (optional)
+## Step 2: Record the fill date (optional)
 
 Create an **Input Datetime** helper to log when each fill happened
 (**Settings → Devices & services → Helpers → + Create helper → Date and/or time**),
 e.g. named `Cistern fill date` → entity `input_datetime.cistern_fill_date`.
 
-## Step 3 — Reset the meter on each fill
+## Step 3: Reset the meter on each fill
 
 When you refill the cistern, reset the `utility_meter` via **Developer Tools → Actions**:
 
@@ -198,7 +198,7 @@ action:
       datetime: "{{ now().isoformat() }}"
 ```
 
-## Step 4 — Automate the refill alert
+## Step 4: Automate the refill alert
 
 ```yaml
 automation:

@@ -8,7 +8,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE
+from homeassistant.const import UnitOfRatio
 
 from .base import PhynEntity, PhynTemperatureSensor
 
@@ -20,7 +20,7 @@ class PhynBatterySensor(PhynEntity, SensorEntity):
     """Monitors the battery level."""
 
     _attr_device_class = SensorDeviceClass.BATTERY
-    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_native_unit_of_measurement = UnitOfRatio.PERCENTAGE
     _attr_state_class: SensorStateClass = SensorStateClass.MEASUREMENT
 
     _device: PhynWaterSensorDevice

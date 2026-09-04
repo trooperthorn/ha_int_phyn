@@ -41,9 +41,11 @@ core 2026.9.0; that is the only version the tests prove. Rejected: keeping the
 CodeQL flagged two discovery log lines (`py/clear-text-logging-sensitive-data`)
 that printed the device MAC and its LAN address. Neither is a secret on its
 own, but debug logs are pasted into issues, and a MAC plus address pair
-identifies a household device. The lines now log the last four characters of
-the identifier and nothing else; the address is still stored on the entry
-where the integration needs it. Rejected: dismissing the alert, because the
+identifies a household device. The lines now log no device identifier at
+all (the info line names the account entry instead); the address is still
+stored on the entry where the integration needs it. A shortened identifier
+was tried first and still flagged, because CodeQL treats anything derived
+from the discovery MAC as private data. Rejected: dismissing the alert, because the
 log-sharing case is the realistic one.
 
 ## 2026-09-04: The platinum quality scale claim is dropped

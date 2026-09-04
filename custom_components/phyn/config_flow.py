@@ -109,11 +109,6 @@ def _extract_device_ids(user_input: dict, homes: list[dict]) -> list[str]:
     return selected
 
 
-def _short_id(value: str) -> str:
-    """Return the last four characters of a device identifier for log lines."""
-    return value[-4:] if value else ""
-
-
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for phyn."""
 
@@ -142,7 +137,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """
         mac = normalize_mac(discovery_info.macaddress)
         host = discovery_info.ip
-        LOGGER.debug("DHCP discovery for device ending %s", _short_id(mac))
+        LOGGER.debug("DHCP discovery received for a Phyn device")
 
         # De-duplicate concurrent discovery flows for the same device.
         await self.async_set_unique_id(f"phyn_local_{mac}")
@@ -160,10 +155,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 await async_verify_device(host, expected_device_id=matched)
             except JnapError as err:
-                LOGGER.debug(
-                    "Discovered device ending %s but JNAP verification failed: %s",
-                    _short_id(mac), err,
-                )
+                LOGGER.debug("Discovered device failed JNAP verification: %s", err)
                 return self.async_abort(reason="not_phyn_local")
             self.hass.config_entries.async_update_entry(
                 entry,
@@ -173,7 +165,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 },
             )
             LOGGER.info(
-                "Local access for Phyn device ending %s auto-configured", _short_id(matched)
+                "Local access auto-configured for a device on account %s", entry.title
             )
             return self.async_abort(reason="local_host_configured")
 

@@ -5,35 +5,33 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
+import homeassistant.helpers.config_validation as cv
 from aiophyn import async_get_api
 from aiophyn.errors import AuthenticationError, RequestError
 from botocore.exceptions import ClientError
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.typing import ConfigType
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
 )
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.typing import ConfigType
 
 from .const import (
-    DOMAIN,
-    CONF_HOME_ID,
     CONF_DEVICE_IDS,
+    CONF_HOME_ID,
     CONF_LOCAL_HOSTS,
     CONF_LOCAL_POLL_INTERVAL,
     CONF_UPDATE_INTERVAL,
     DEFAULT_LOCAL_POLL_INTERVAL,
     DEFAULT_UPDATE_INTERVAL,
+    DOMAIN,
 )
-from .update_coordinator import PhynDataUpdateCoordinator
-from .exceptions import HaAuthError, HaCannotConnect
 from .services import async_setup_services
+from .update_coordinator import PhynDataUpdateCoordinator
 
 
 @dataclass
@@ -204,8 +202,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: PhynConfigEntry) -> bool
         if error.response['Error']['Code'] == "NotAuthorizedException":
             raise ConfigEntryAuthFailed(
                 translation_domain=DOMAIN,
-                translation_key="auth_failed"
-            )
+                translation_key="auth_failed",
+            ) from error
         else:
             raise error
 

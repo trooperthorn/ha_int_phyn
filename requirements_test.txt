@@ -5,6 +5,8 @@ homeassistant==2026.9.0
 pytest-cov>=4.1.0
 PySocks>=1.7.1
 PyYAML>=6.0
+ruff==0.16.5
+mypy==2.3.1
 
 # aiophyn is intentionally not listed here. Its metadata pins
 # pycognito<2023.0.0, which conflicts with hass-nabucasa (pulled in by

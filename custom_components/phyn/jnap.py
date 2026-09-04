@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 import logging
 from typing import Any
@@ -184,10 +185,8 @@ class JnapClient:
                     raw = await reader.read(1024 * 1024)
                 finally:
                     writer.close()
-                    try:
+                    with contextlib.suppress(OSError):
                         await writer.wait_closed()
-                    except OSError:
-                        pass
         except (OSError, TimeoutError) as err:
             raise JnapConnectionError(f"Cannot reach {self._host}: {err}") from err
 

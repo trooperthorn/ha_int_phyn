@@ -4,9 +4,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.helpers.entity import DeviceInfo, Entity, EntityCategory
-from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
-
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -24,14 +21,17 @@ from homeassistant.components.update import (
     UpdateEntityFeature,
 )
 from homeassistant.const import (
-    UnitOfRatio,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     UnitOfPressure,
+    UnitOfRatio,
     UnitOfTemperature,
     UnitOfVolume,
 )
+from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
+from homeassistant.helpers.entity import DeviceInfo, Entity, EntityCategory
 
-from ..const import DOMAIN as PHYN_DOMAIN, ALL_ALERT_TYPES, LOGGER
+from ..const import ALL_ALERT_TYPES, LOGGER
+from ..const import DOMAIN as PHYN_DOMAIN
 
 if TYPE_CHECKING:
     from ..devices.base import PhynDevice

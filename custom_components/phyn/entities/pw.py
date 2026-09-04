@@ -10,7 +10,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import UnitOfRatio
 
-from .base import PhynEntity, PhynTemperatureSensor
+from .base import PhynEntity
 
 if TYPE_CHECKING:
     from ..devices.pw import PhynWaterSensorDevice

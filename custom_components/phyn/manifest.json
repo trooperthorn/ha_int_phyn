@@ -22,7 +22,6 @@
     "custom_components.phyn",
     "aiophyn"
   ],
-  "quality_scale": "platinum",
   "requirements": [
     "aiophyn==2026.6.4"
   ],

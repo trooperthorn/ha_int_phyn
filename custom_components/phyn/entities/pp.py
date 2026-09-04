@@ -13,15 +13,15 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.helpers.entity import EntityCategory
 from homeassistant.components.valve import (
     ValveDeviceClass,
     ValveEntity,
     ValveEntityFeature,
 )
 from homeassistant.const import UnitOfVolume, UnitOfVolumeFlowRate
+from homeassistant.helpers.entity import EntityCategory
 
-from .base import PhynEntity, PhynSwitchEntity, WATER_ICON
+from .base import WATER_ICON, PhynEntity, PhynSwitchEntity
 
 if TYPE_CHECKING:
     from ..devices.pp import PhynPlusDevice

@@ -35,3 +35,26 @@ The bare `PERCENTAGE` constant as a unit is deprecated since core 2026.7
 The suite runs on `pytest-homeassistant-custom-component` 0.13.363, which pins
 core 2026.9.0; that is the only version the tests prove. Rejected: keeping the
 2026.6.4 floor.
+
+## 2026-09-04: DHCP discovery logs a shortened identifier, not the host
+
+CodeQL flagged two discovery log lines (`py/clear-text-logging-sensitive-data`)
+that printed the device MAC and its LAN address. Neither is a secret on its
+own, but debug logs are pasted into issues, and a MAC plus address pair
+identifies a household device. The lines now log no device identifier at
+all (the info line names the account entry instead); the address is still
+stored on the entry where the integration needs it. A shortened identifier
+was tried first and still flagged, because CodeQL treats anything derived
+from the discovery MAC as private data. Rejected: dismissing the alert, because the
+log-sharing case is the realistic one.
+
+## 2026-09-04: The platinum quality scale claim is dropped
+
+`manifest.json` carried `quality_scale: platinum` inherited from upstream with
+no `quality_scale.yaml` ledger behind it. The claim is removed rather than
+backed by a ledger written in a hurry; the rules this fork demonstrably meets
+(runtime data, reauth and reconfigure flows, diagnostics, translations) are
+listed in `docs/design.md`, and a ledger can be added when the remaining
+rules are audited one by one. Rejected: keeping an unverified claim, which
+contradicts the house rule of never asserting what has not been checked.
+

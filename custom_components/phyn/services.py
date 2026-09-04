@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
-
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -14,13 +13,18 @@ from homeassistant.core import (
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import (
     config_validation as cv,
+)
+from homeassistant.helpers import (
     device_registry as dr,
+)
+from homeassistant.helpers import (
     entity_registry as er,
 )
 from homeassistant.helpers.target import (
     TargetSelection,
     async_extract_referenced_entity_ids,
 )
+from homeassistant.util.json import JsonValueType
 
 from .const import DOMAIN, LOGGER
 
@@ -135,7 +139,7 @@ async def _async_leak_test(call: ServiceCall) -> ServiceResponse:
     devices = _extract_phyn_plus_devices(call)
     extended = bool(call.data.get("extended", False))
 
-    results: list[dict[str, Any]] = []
+    results: list[JsonValueType] = []
     for device in devices:
         LOGGER.debug(
             "Running %s leak test for device %s",

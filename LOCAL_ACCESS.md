@@ -1,4 +1,4 @@
-# Local (LAN) Access to Phyn Devices — Research & Architecture
+# Local (LAN) Access to Phyn Devices: Research & Architecture
 
 _Last updated: 2026-08-20_
 
@@ -12,15 +12,15 @@ nothing else.**
 
 | Device | Local access | What this integration does |
 |---|---|---|
-| Phyn Plus (PP2, fw 4.9.x) | **Yes — JNAP HTTP API on TCP port 80** (unofficial) | Local telemetry polling every 10 s + local valve control, with automatic cloud fallback |
-| Phyn Plus (PP1) | Unknown (likely, unverified) | Same code path — configure a local IP and the integration verifies before using it |
+| Phyn Plus (PP2, fw 4.9.x) | **Yes, JNAP HTTP API on TCP port 80** (unofficial) | Local telemetry polling every 10 s + local valve control, with automatic cloud fallback |
+| Phyn Plus (PP1) | Unknown (likely, unverified) | Same code path, configure a local IP and the integration verifies before using it |
 | Phyn Classic (PC1) | Unknown | Cloud only |
-| Phyn Smart Water Sensor (PW1) | **No** — battery WiFi device, sleeps, exposes nothing | Cloud only, with MQTT push subscribed so leak events arrive within seconds |
+| Phyn Smart Water Sensor (PW1) | **No**, battery WiFi device, sleeps, exposes nothing | Cloud only, with MQTT push subscribed so leak events arrive within seconds |
 
 ## 1. The Phyn Plus local API: JNAP
 
 The Phyn Plus runs a lighttpd web server on **TCP port 80** speaking **JNAP**
-(JSON Network Access Protocol) — the same protocol family Belkin/Linksys
+(JSON Network Access Protocol), the same protocol family Belkin/Linksys
 routers and Uponor Smatrix modules use (Phyn was originally a Belkin/Uponor
 joint venture, and Phyn built Uponor's communication modules; JNAP actions on
 both use the `http://phyn.com/jnap/...` action namespace).
@@ -29,7 +29,7 @@ Protocol summary (verified on PP2 firmware 4.9.x):
 
 - Every call is `POST http://<device-ip>/JNAP/`; the operation is selected by
   the `X-JNAP-Action` header, not the path.
-- Authorization: `X-JNAP-Authorization: Basic <base64("admin:admin")>` —
+- Authorization: `X-JNAP-Authorization: Basic <base64("admin:admin")>` -
   static firmware credentials.
 - Response envelope: `{"result": "OK", "output": {...}}`.
 - Known-good actions:
@@ -44,10 +44,10 @@ Protocol summary (verified on PP2 firmware 4.9.x):
   - `http://phyn.com/jnap/shutoff/SetShutoffValveState` with
     `{"state": "Open"|"Close"}` → **actuates the physical valve**
 - The local interface runs in parallel with the cloud connection. It is
-  polling-only — there is no local push/subscribe mechanism.
+  polling-only, there is no local push/subscribe mechanism.
 
 **Firmware quirk:** on fw `4.9.0.23`, the `attribute/get` response is
-malformed HTTP — a debug line leaks into the headers and a pipelined second
+malformed HTTP, a debug line leaks into the headers and a pipelined second
 response follows the declared `Content-Length` body. Strict clients (aiohttp)
 reject it. This integration's client (`custom_components/phyn/jnap.py`)
 therefore speaks raw TCP and parses tolerantly: it skips non-header lines and
@@ -55,9 +55,9 @@ reads exactly `Content-Length` bytes.
 
 Sources:
 
-- https://github.com/rplankenhorn/ha-phyn-local — LAN-only HA integration for
+- https://github.com/rplankenhorn/ha-phyn-local, LAN-only HA integration for
   the PP2 (July 2026), incl. `PROTOCOL.md` documenting the actions above.
-- https://github.com/rplankenhorn/ha-phyn-local/issues/1 — independent user
+- https://github.com/rplankenhorn/ha-phyn-local/issues/1, independent user
   confirming the endpoint on real PP2 hardware (fw
   `Phyn_WaterDevice_release_4_9_0_23_locked`, `lighttpd/1.4.49`) and
   documenting the malformed-HTTP quirk.
@@ -82,22 +82,22 @@ Sources:
 
 All verified as of August 2026:
 
-- **No official/public Phyn API** — no developer portal, no documented REST
+- **No official/public Phyn API**: no developer portal, no documented REST
   API, no OpenAPI/Swagger for `api.phyn.com`. Official integrations are
   Alexa, Google Assistant, and IFTTT (cloud-to-cloud).
 - **No HomeKit and no Matter support** on any Phyn device (HomeKit was
   promised historically and never shipped), so HA's local HomeKit Controller
   path is unavailable.
-- **No mDNS/zeroconf or SSDP advertisement** — DHCP is the only usable
+- **No mDNS/zeroconf or SSDP advertisement**: DHCP is the only usable
   discovery signal.
 - **No local API on the PW1** water sensor pucks. They are battery devices
   that sleep and wake only to report to the cloud.
-- **No published MQTT interception or firmware analysis** — the devices
+- **No published MQTT interception or firmware analysis**: the devices
   authenticate to AWS IoT with device certificates; nobody has published
   redirecting them to a local broker.
-- **No BLE data path** — Bluetooth is used only for initial WiFi
+- **No BLE data path**: Bluetooth is used only for initial WiFi
   provisioning; no GATT maps or BLE advertisements have been documented.
-- **No `phyn` integration in Home Assistant core** — everything is
+- **No `phyn` integration in Home Assistant core**: everything is
   custom/HACS.
 
 ## 3. The cloud protocol (fallback and PW1 path)
@@ -105,7 +105,7 @@ All verified as of August 2026:
 Via the `aiophyn` library (https://github.com/jordanruthe/aiophyn):
 
 - **Auth:** AWS Cognito SRP (`us-east-1`), refresh-token renewal.
-- **REST:** `https://api.phyn.com` — state, consumption, water statistics
+- **REST:** `https://api.phyn.com`, state, consumption, water statistics
   (PW1), valve open/close, preferences (away mode, leak-test scheduler),
   auto-shutoff enable/disable (with timed disable), health tests (leak
   tests), firmware info, alerts (latest / active summary / mark-read).
@@ -141,31 +141,31 @@ alerts land in seconds instead of at the next poll.
 - **Local telemetry:** when a local IP is configured for a Phyn Plus, the
   integration polls `attribute/get` every 10 seconds and maps pressure,
   temperature, flow, flow state, valve state, cumulative consumption, and
-  WiFi RSSI onto the same state the cloud feeds — entities update from
+  WiFi RSSI onto the same state the cloud feeds, entities update from
   whichever source spoke last. While local polling is healthy the cloud
   state endpoint is skipped, reducing cloud API load.
 - **Local valve control:** `valve.open`/`valve.close` go to the device
-  directly when local is healthy, falling back to the cloud API — so leak
+  directly when local is healthy, falling back to the cloud API, so leak
   response automations still work during an internet outage.
 - **Fallback:** after 3 consecutive local failures the integration logs a
   warning, marks local down (see the "Local Connection" diagnostic sensor),
   and relies on cloud; local recovers automatically when polls succeed again.
 - **Configuration:** per-device local IPs live in the integration options.
   DHCP discovery (`28:F5:37*`) auto-fills and auto-updates them after a
-  successful identity check — a DHCP reservation for the Phyn Plus is still
+  successful identity check, a DHCP reservation for the Phyn Plus is still
   recommended.
 - **Availability:** a device counts as available while local polling is
   healthy, even if the Phyn cloud says it is offline.
 
 ## 5. Future paths
 
-- **PP1:** confirm JNAP works on PP1 hardware (expected but unverified) —
+- **PP1:** confirm JNAP works on PP1 hardware (expected but unverified) -
   reports welcome in the issue tracker.
 - **Additional JNAP attributes:** the `attribute/get` dump contains more than
   is currently mapped (leak-detector state flags, plumbing-check progress,
   valve close counts, uptime). These can become entities once field meanings
   are confirmed on real hardware.
 - **Cloud independence:** should the Phyn cloud ever degrade (Phyn changed
-  owners in 2025 — Belkin sold it to an investor group), the local path
+  owners in 2025, Belkin sold it to an investor group), the local path
   already covers the safety-critical functions for the Phyn Plus: telemetry
   and valve control.

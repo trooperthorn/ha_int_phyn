@@ -4,7 +4,6 @@ from enum import StrEnum
 
 LOGGER = logging.getLogger(__package__)
 
-CLIENT = "client"
 DOMAIN = "phyn"
 
 # All known alert types across all Phyn device models.

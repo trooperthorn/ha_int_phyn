@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
-from .const import CLIENT, DOMAIN
+from .const import DOMAIN
 
 # Keys removed from state/preference dumps. Device IDs are kept (shortened)
 # because they are required to correlate diagnostics with debug logs.
@@ -44,9 +44,9 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
-    data = hass.data.get(DOMAIN, {})
-    client = data.get(CLIENT)
-    coordinator = data.get("coordinator")
+    runtime = getattr(entry, "runtime_data", None)
+    client = runtime.client if runtime is not None else None
+    coordinator = runtime.coordinator if runtime is not None else None
 
     diagnostics: dict[str, Any] = {
         "entry": {

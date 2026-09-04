@@ -24,7 +24,7 @@ from homeassistant.components.update import (
     UpdateEntityFeature,
 )
 from homeassistant.const import (
-    PERCENTAGE,
+    UnitOfRatio,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     UnitOfPressure,
     UnitOfTemperature,
@@ -318,7 +318,7 @@ class PhynHumiditySensor(PhynEntity, SensorEntity):
     """Monitors the humidty."""
 
     _attr_device_class = SensorDeviceClass.HUMIDITY
-    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_native_unit_of_measurement = UnitOfRatio.PERCENTAGE
     _attr_state_class: SensorStateClass = SensorStateClass.MEASUREMENT
 
     def __init__(

@@ -1,8 +1,4 @@
-# Runs the pytest suite plus the repo-specific translations-sync and mypy
-# type-check jobs on every push and pull request. release.yml calls this
-# workflow so the same jobs gate every GitHub Release. There is no frontend
-# bundle in this repository, so the bundle-drift job from the generic
-# template is not present here.
+# Pytest, translations sync, and mypy; release.yml calls this workflow so the same jobs gate every release.
 name: Test
 
 on:
@@ -25,16 +21,9 @@ jobs:
           python-version: "3.14"
           cache: pip
           cache-dependency-path: requirements_test.txt
-      # pytest-homeassistant-custom-component pulls in homeassistant as a loose
-      # dependency; installing it pinned first, before requirements_test.txt
-      # (which pins homeassistant==2026.9.0 itself), keeps pip's resolver from
-      # backtracking across years of releases (avoids "resolution-too-deep").
-      # aiophyn is installed separately with --no-deps; see the comment in
-      # requirements_test.txt for why (its pycognito pin conflicts with
-      # hass-nabucasa's).
+      # aiophyn is installed with --no-deps; see docs/operations.md.
       - name: Install the test harness
         run: |
-          pip install pytest-homeassistant-custom-component==0.13.362
           pip install -r requirements_test.txt
           pip install --no-deps aiophyn==2026.6.4
       - name: Verify runtime versions

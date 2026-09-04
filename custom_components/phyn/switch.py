@@ -6,7 +6,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.components.switch import SwitchEntity
 
-from .const import DOMAIN as PHYN_DOMAIN
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -14,7 +13,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Phyn switches from config entry."""
-    coordinator = hass.data[PHYN_DOMAIN]["coordinator"]
+    coordinator = config_entry.runtime_data.coordinator
     entities = []
     for device in coordinator.devices:
         entities.extend([

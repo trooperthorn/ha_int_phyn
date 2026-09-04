@@ -1,11 +1,4 @@
-# Reconciles the version on main into a GitHub Release. A normal merge is the
-# release trigger: maintainers never create or push tags by hand. Reruns are
-# safe; an already-published version is left immutable.
-#
-# HACS installs this repository from the tagged tree (hacs.json
-# content_in_root: false, no zip_release), so there is no archive, SBOM,
-# checksum, or attestation step here; the release carries the tag and the
-# GitHub Release object only. The Release still gates on tests and validate.
+# A merge to main is the release trigger; see docs/operations.md.
 name: Release
 
 on:

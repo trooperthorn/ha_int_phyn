@@ -1,5 +1,6 @@
 """Constants for the phyn integration."""
 import logging
+from datetime import timedelta
 
 LOGGER = logging.getLogger(__package__)
 
@@ -46,3 +47,11 @@ MAX_LOCAL_POLL_INTERVAL = 60
 # Consecutive local poll failures before falling back to cloud-only and
 # surfacing a warning (transient WiFi hiccups shouldn't flap the source).
 LOCAL_FAILURE_THRESHOLD = 3
+CONF_LOW_BATTERY_THRESHOLD = "low_battery_threshold"
+DEFAULT_LOW_BATTERY_THRESHOLD = 10
+FLOW_MEAN_MAX_AGE = timedelta(minutes=10)
+# Outages shorter than this keep entities on their last values; the Online
+# sensor and the valve still show the raw state. See docs/operations.md.
+OFFLINE_GRACE = timedelta(minutes=20)
+CONF_DEAD_AFTER_HOURS = "dead_after_hours"
+DEFAULT_DEAD_AFTER_HOURS = 72

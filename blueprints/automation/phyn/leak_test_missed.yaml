@@ -1,0 +1,60 @@
+blueprint:
+  name: "Phyn: Daily leak test missed"
+  description: >
+    Notify when the Phyn Plus has not completed a leak test for longer than a
+    set number of hours. The default of 49 hours tolerates one test lost to a
+    short outage while still catching tests that have stopped running.
+
+
+    Your actions can use the variables `hours_since` and `message`.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_phyn/blob/main/blueprints/automation/phyn/leak_test_missed.yaml
+  input:
+    last_leak_test:
+      name: Last leak test sensor
+      description: The Phyn Plus "Last Leak Test" sensor.
+      selector:
+        entity:
+          filter:
+            - integration: phyn
+              domain: sensor
+              device_class: timestamp
+    max_hours:
+      name: Alert after (hours)
+      default: 49
+      selector:
+        number:
+          min: 25
+          max: 336
+          step: 1
+          unit_of_measurement: h
+          mode: box
+    actions:
+      name: Notification actions
+      default: []
+      selector:
+        action:
+
+mode: single
+max_exceeded: silent
+
+trigger_variables:
+  last_leak_test: !input last_leak_test
+  max_hours: !input max_hours
+
+triggers:
+  - trigger: template
+    value_template: >-
+      {% set last = states(last_leak_test) | as_datetime %}
+      {{ last is not none and (now() - last).total_seconds() > max_hours * 3600 }}
+
+variables:
+  last: "{{ states(last_leak_test) | as_datetime }}"
+  hours_since: "{{ ((now() - last).total_seconds() / 3600) | round(0) | int }}"
+  message: >-
+    No Phyn leak test has completed in {{ hours_since }} hours (last one
+    {{ as_local(last).strftime('%b %d %H:%M') }}). Check that the device is
+    online and that the daily leak test is enabled.
+
+actions:
+  - sequence: !input actions

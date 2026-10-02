@@ -1,0 +1,98 @@
+blueprint:
+  name: "Phyn: Alert notifier"
+  description: >
+    Notify for every alert a Phyn device raises, using the device's Alert
+    event entity. Phyn's leak alert can come from a sustained flow level
+    rather than a confirmed leak, so the message includes the current flow
+    rate and pressure to help judge it.
+
+
+    Your actions can use the variables `device_name`, `alert_type`, `flow`,
+    `pressure` and `message`.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_phyn/blob/main/blueprints/automation/phyn/alert_notifier.yaml
+  input:
+    alert_events:
+      name: Alert event entities
+      selector:
+        entity:
+          filter:
+            - integration: phyn
+              domain: event
+          multiple: true
+    ignored_types:
+      name: Alert types to ignore
+      default: []
+      selector:
+        select:
+          multiple: true
+          custom_value: true
+          options:
+            - leak
+            - pinhole_leak
+            - periodic_leak
+            - high_pressure
+            - freeze_warn
+            - battery
+            - temperature
+            - humidity
+            - water_detected
+    flow_sensor:
+      name: Flow rate sensor (optional)
+      default: ""
+      selector:
+        entity:
+          filter:
+            - integration: phyn
+              domain: sensor
+              device_class: volume_flow_rate
+    pressure_sensor:
+      name: Pressure sensor (optional)
+      default: ""
+      selector:
+        entity:
+          filter:
+            - integration: phyn
+              domain: sensor
+              device_class: pressure
+    actions:
+      name: Notification actions
+      default: []
+      selector:
+        action:
+
+mode: queued
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input alert_events
+    not_from:
+      - unavailable
+      - unknown
+    not_to:
+      - unavailable
+      - unknown
+
+variables:
+  ignored_types: !input ignored_types
+  flow_sensor: !input flow_sensor
+  pressure_sensor: !input pressure_sensor
+  alert_type: "{{ trigger.to_state.attributes.event_type }}"
+  device_name: >-
+    {{ device_attr(device_id(trigger.entity_id), 'name_by_user')
+       or device_attr(device_id(trigger.entity_id), 'name') }}
+  flow: "{{ states(flow_sensor) if flow_sensor else '' }}"
+  pressure: "{{ states(pressure_sensor) if pressure_sensor else '' }}"
+  message: >-
+    {{ device_name }}: {{ alert_type | replace('_', ' ') }} alert.
+    {%- if flow %} Flow {{ flow }} {{ state_attr(flow_sensor, 'unit_of_measurement') }}.{% endif %}
+    {%- if pressure %} Pressure {{ pressure }} {{ state_attr(pressure_sensor, 'unit_of_measurement') }}.{% endif %}
+    {%- if alert_type == 'leak' %} Phyn raises this on a sustained flow level; check for running fixtures before assuming a leak.{% endif %}
+
+conditions:
+  - condition: template
+    value_template: "{{ alert_type not in ignored_types }}"
+
+actions:
+  - sequence: !input actions

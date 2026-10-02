@@ -8,6 +8,8 @@ import homeassistant.util.dt as dt_util
 from aiophyn.errors import RequestError
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+
 from ..const import LOGGER
 from ..entities.base import (
     PhynAlertEvent,
@@ -57,7 +59,7 @@ class PhynClassicDevice(PhynDevice):
 
         self.entities = [
             PhynAlertEvent(self),
-            PhynAlertSensor(self, "alert_battery", "Battery Alert", "alert_battery"),
+            PhynAlertSensor(self, "alert_battery", "Battery Alert", "alert_battery", BinarySensorDeviceClass.BATTERY),
             PhynAlertSensor(self, "alert_freeze_warn", "Freeze Warning Alert", "alert_freeze_warn"),
             PhynAlertSensor(self, "alert_high_pressure", "High Pressure Alert", "alert_high_pressure"),
             PhynAlertSensor(self, "alert_leak", "Leak Alert", "alert_leak"),

@@ -1,5 +1,6 @@
 """The phyn integration."""
 import asyncio
+import contextlib
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
@@ -243,6 +244,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: PhynConfigEntry) -> bool
 
     try:
         await client.mqtt.connect()
+        # connect() returns once the socket opens; subscribing before the
+        # CONNACK is silently dropped, so wait for it (the coordinator
+        # resends anything still unacknowledged if this times out).
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(client.mqtt.connect_evt.wait(), timeout=10)
 
         coordinator = PhynDataUpdateCoordinator(hass, client, entry)
         for device_id in device_ids:

@@ -1,0 +1,50 @@
+blueprint:
+  name: "Phyn: Water sensor low battery"
+  description: >
+    Notify when a Phyn water sensor's battery is at or below the low battery
+    level set in the integration's options (default 10%).
+
+
+    Your actions can use the variables `device_name`, `battery` and
+    `message`.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_phyn/blob/main/blueprints/automation/phyn/low_battery.yaml
+  input:
+    battery_alerts:
+      name: Low Battery Alert sensors
+      description: The Phyn water sensor "Low Battery Alert" entities.
+      selector:
+        entity:
+          filter:
+            - integration: phyn
+              domain: binary_sensor
+              device_class: battery
+          multiple: true
+    actions:
+      name: Notification actions
+      default: []
+      selector:
+        action:
+
+mode: queued
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input battery_alerts
+    attribute: battery_state
+    to: low
+
+variables:
+  device_name: >-
+    {{ device_attr(device_id(trigger.entity_id), 'name_by_user')
+       or device_attr(device_id(trigger.entity_id), 'name') }}
+  battery: >-
+    {{ device_entities(device_id(trigger.entity_id))
+       | select('match', 'sensor\.')
+       | select('is_state_attr', 'device_class', 'battery')
+       | map('states') | first | default('unknown') }}
+  message: "{{ device_name }} battery is low ({{ battery }}%). Replace it soon."
+
+actions:
+  - sequence: !input actions

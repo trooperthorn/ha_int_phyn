@@ -9,10 +9,14 @@ from typing import TYPE_CHECKING, Any
 
 import homeassistant.util.dt as dt_util
 from aiophyn.errors import RequestError
+from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+
 from ..const import (
+    FLOW_MEAN_MAX_AGE,
     CONF_LOCAL_HOSTS,
     CONF_LOCAL_POLL_INTERVAL,
     DEFAULT_LOCAL_POLL_INTERVAL,
@@ -112,7 +116,7 @@ class PhynPlusDevice(PhynDevice):
 
         self.entities = [
             PhynAlertEvent(self),
-            PhynAlertSensor(self, "alert_battery", "Battery Alert", "alert_battery"),
+            PhynAlertSensor(self, "alert_battery", "Battery Alert", "alert_battery", BinarySensorDeviceClass.BATTERY),
             PhynAlertSensor(self, "alert_freeze_warn", "Freeze Warning Alert", "alert_freeze_warn"),
             PhynAlertSensor(self, "alert_high_pressure", "High Pressure Alert", "alert_high_pressure"),
             PhynAlertSensor(self, "alert_leak", "Leak Alert", "alert_leak"),
@@ -193,10 +197,15 @@ class PhynPlusDevice(PhynDevice):
 
         The realtime feed reports ``{"v": ...}``; the REST state endpoint may
         instead carry ``{"mean": ...}`` (like pressure/temperature), so both
-        are accepted to avoid sitting at unknown until the first push.
+        are accepted to avoid sitting at unknown until the first push. The
+        REST mean summarizes a past window, so one older than
+        FLOW_MEAN_MAX_AGE means no recent flow and reads as 0.
         """
         flow = self._device_state.get("flow", {})
-        value = flow.get("v", flow.get("mean"))
+        value = flow.get("v")
+        if value is None and "mean" in flow:
+            age = time.time() - flow.get("ts", 0) / 1000
+            value = flow["mean"] if age <= FLOW_MEAN_MAX_AGE.total_seconds() else 0.0
         if not isinstance(value, (int, float)):
             return None
         return round(value, 3)
@@ -295,6 +304,17 @@ class PhynPlusDevice(PhynDevice):
         return sov_status.get("v") == "Partial"
 
     @property
+    def mac_addresses(self) -> set[str]:
+        """Add the Wi-Fi MAC, which is the device id + 1 on a Phyn Plus."""
+        wifi = format_mac(f"{(int(self.id, 16) + 1) & 0xFFFFFFFFFFFF:012x}")
+        return super().mac_addresses | {wifi}
+
+    @property
+    def online(self) -> bool:
+        """Online when locally reachable, else when the cloud says online."""
+        return self._local_active or super().online
+
+    @property
     def available(self) -> bool:
         """Available when locally reachable, else when the cloud says online."""
         if self._local_active:
@@ -332,7 +352,7 @@ class PhynPlusDevice(PhynDevice):
         LOGGER.debug("Setting up coordinator")
 
         await self._coordinator.api_client.mqtt.add_event_handler("update", self.on_device_update)
-        await self._coordinator.api_client.mqtt.subscribe(f"prd/app_subscriptions/{self._phyn_device_id}")
+        await self._coordinator.async_subscribe_push(f"prd/app_subscriptions/{self._phyn_device_id}")
 
         if self._local_client is not None:
             LOGGER.debug(

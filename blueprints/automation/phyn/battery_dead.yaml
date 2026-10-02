@@ -1,0 +1,46 @@
+blueprint:
+  name: "Phyn: Water sensor battery dead"
+  description: >
+    Notify when a Phyn water sensor stops reporting. A PW1 goes silent when
+    its battery is too weak to run, so the integration marks the battery dead
+    once the sensor is offline or has not reported for the hours set in the
+    integration's options (default 72).
+
+
+    Your actions can use the variables `device_name` and `message`.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_phyn/blob/main/blueprints/automation/phyn/battery_dead.yaml
+  input:
+    battery_alerts:
+      name: Low Battery Alert sensors
+      description: The Phyn water sensor "Low Battery Alert" entities.
+      selector:
+        entity:
+          filter:
+            - integration: phyn
+              domain: binary_sensor
+              device_class: battery
+          multiple: true
+    actions:
+      name: Notification actions
+      default: []
+      selector:
+        action:
+
+mode: queued
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input battery_alerts
+    attribute: battery_state
+    to: dead
+
+variables:
+  device_name: >-
+    {{ device_attr(device_id(trigger.entity_id), 'name_by_user')
+       or device_attr(device_id(trigger.entity_id), 'name') }}
+  message: "{{ device_name }} has stopped reporting; its battery is likely dead. Replace it."
+
+actions:
+  - sequence: !input actions

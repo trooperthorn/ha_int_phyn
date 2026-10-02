@@ -1,6 +1,7 @@
 """Support for Phyn Water Sensors."""
 from __future__ import annotations
 
+import time
 from asyncio import timeout
 from collections import defaultdict
 from datetime import datetime
@@ -18,7 +19,14 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 
-from ..const import DOMAIN, LOGGER
+from ..const import (
+    CONF_DEAD_AFTER_HOURS,
+    CONF_LOW_BATTERY_THRESHOLD,
+    DEFAULT_DEAD_AFTER_HOURS,
+    DEFAULT_LOW_BATTERY_THRESHOLD,
+    DOMAIN,
+    LOGGER,
+)
 from ..entities.base import (
     PhynAlertEvent,
     PhynAlertSensor,
@@ -29,7 +37,7 @@ from ..entities.base import (
     PhynTemperatureSensor,
     PhynTimestampSensor,
 )
-from ..entities.pw import PhynBatterySensor
+from ..entities.pw import PhynBatteryAlertSensor, PhynBatterySensor
 from .base import PhynDevice
 
 _DEVICE_CLASS_UNIT_CLASS: dict[SensorDeviceClass, str | None] = {
@@ -72,7 +80,7 @@ class PhynWaterSensorDevice(PhynDevice):
 
         self.entities = [
             PhynAlertEvent(self),
-            PhynAlertSensor(self, "battery_alert", "Low Battery Alert", "alert_battery"),
+            PhynBatteryAlertSensor(self),
             PhynAlertSensor(self, "high_humidity_alert", "High Humidity Alert", "high_humidity"),
             PhynAlertSensor(self, "low_humidity_alert", "Low Humidity Alert", "low_humidity"),
             PhynAlertSensor(self, "low_temperature_alert", "Low Temperature Alert", "low_temperature"),
@@ -87,9 +95,31 @@ class PhynWaterSensorDevice(PhynDevice):
         ]
 
     @property
+    def battery_state(self) -> str:
+        """Return "dead", "low" or "normal".
+
+        A PW1 stops reporting when its battery is too low to run, so a sensor
+        that is offline or silent past the configured hours counts as dead.
+        The measured level wins over the Phyn cloud alert, which stays ongoing
+        after the puck recovers or the battery is replaced.
+        """
+        options = self._coordinator.config_entry.options
+        dead_after = options.get(CONF_DEAD_AFTER_HOURS, DEFAULT_DEAD_AFTER_HOURS)
+        last = self._last_statistics_ts
+        if not self.online or (last and time.time() - last > dead_after * 3600):
+            return "dead"
+        level = self.battery
+        if level is not None:
+            threshold = options.get(
+                CONF_LOW_BATTERY_THRESHOLD, DEFAULT_LOW_BATTERY_THRESHOLD
+            )
+            return "low" if level <= threshold else "normal"
+        return "low" if self.has_ongoing_alert("battery") else "normal"
+
+    @property
     def alert_battery(self) -> bool:
-        """Return True when the Phyn API reports an active low-battery alert."""
-        return self.has_ongoing_alert("battery")
+        """Return True when the battery is low or dead."""
+        return self.battery_state != "normal"
 
     @property
     def battery(self) -> int | None:
@@ -344,7 +374,7 @@ class PhynWaterSensorDevice(PhynDevice):
         await self._coordinator.api_client.mqtt.add_event_handler(
             "update", self.on_device_update
         )
-        await self._coordinator.api_client.mqtt.subscribe(
+        await self._coordinator.async_subscribe_push(
             f"prd/app_subscriptions/{self._phyn_device_id}"
         )
 

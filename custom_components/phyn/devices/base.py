@@ -7,7 +7,9 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from ..const import LOGGER
+from homeassistant.helpers.device_registry import format_mac
+
+from ..const import LOGGER, OFFLINE_GRACE
 
 if TYPE_CHECKING:
     from ..update_coordinator import PhynDataUpdateCoordinator
@@ -46,10 +48,30 @@ class PhynDevice:
         self._alert_seed_done: bool = False
     
     @property
-    def available(self) -> bool:
-        """Return True if device is available."""
+    def mac_addresses(self) -> set[str]:
+        """Return the MAC addresses this device is known by on the network.
+
+        Presented as device registry connections so the device is listed as
+        linked to the same hardware seen by network integrations such as
+        UniFi. The Phyn device id is the MAC without separators.
+        """
+        return {format_mac(self.id)}
+
+    @property
+    def online(self) -> bool:
+        """Return True when the Phyn cloud reports the device online."""
         online_status = self._device_state.get("online_status", {})
         return online_status.get("v") == "online"
+
+    @property
+    def available(self) -> bool:
+        """Return True unless the device has been offline past OFFLINE_GRACE."""
+        if self.online:
+            return True
+        offline_since = self._device_state.get("online_status", {}).get("ts")
+        if not isinstance(offline_since, (int, float)):
+            return False
+        return time.time() - offline_since / 1000 < OFFLINE_GRACE.total_seconds()
     
     @property
     def coordinator(self) -> PhynDataUpdateCoordinator:

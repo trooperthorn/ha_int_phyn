@@ -9,17 +9,16 @@ from typing import TYPE_CHECKING, Any
 
 import homeassistant.util.dt as dt_util
 from aiophyn.errors import RequestError
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from homeassistant.components.binary_sensor import BinarySensorDeviceClass
-
 from ..const import (
-    FLOW_MEAN_MAX_AGE,
     CONF_LOCAL_HOSTS,
     CONF_LOCAL_POLL_INTERVAL,
     DEFAULT_LOCAL_POLL_INTERVAL,
+    FLOW_MEAN_MAX_AGE,
     LOCAL_FAILURE_THRESHOLD,
     LOGGER,
 )

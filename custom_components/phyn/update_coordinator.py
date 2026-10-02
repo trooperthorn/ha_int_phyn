@@ -22,9 +22,9 @@ from .const import (
     DOMAIN as PHYN_DOMAIN,
 )
 from .devices.pc import PhynClassicDevice
-from .push import async_resubscribe, async_subscribe, unacked_topics
 from .devices.pp import PhynPlusDevice
 from .devices.pw import PhynWaterSensorDevice
+from .push import async_resubscribe, async_subscribe, unacked_topics
 
 MQTT_DOWN_RELOAD_THRESHOLD = 10
 STATE_FETCH_FAILURE_THRESHOLD = 3  # ~3 min at 60s polls before surfacing UpdateFailed

@@ -6,9 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 import homeassistant.util.dt as dt_util
 from aiophyn.errors import RequestError
-from homeassistant.helpers.update_coordinator import UpdateFailed
-
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from ..const import LOGGER
 from ..entities.base import (

@@ -16,10 +16,10 @@ from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 from .const import (
     ALL_ALERT_TYPES,
+    CONF_DEAD_AFTER_HOURS,
     CONF_DEVICE_IDS,
     CONF_EXCLUDED_ALERT_TYPES,
     CONF_LOCAL_HOSTS,
-    CONF_DEAD_AFTER_HOURS,
     CONF_LOCAL_POLL_INTERVAL,
     CONF_LOW_BATTERY_THRESHOLD,
     CONF_UPDATE_INTERVAL,

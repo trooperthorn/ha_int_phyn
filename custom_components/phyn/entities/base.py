@@ -67,7 +67,7 @@ class PhynEntity(Entity):
             model=self._device.model,
             name=self._device.device_name,
             sw_version=self._device.firmware_version,
-            connections={(CONNECTION_NETWORK_MAC, self._device.id)},
+            connections={(CONNECTION_NETWORK_MAC, mac) for mac in self._device.mac_addresses},
             serial_number=self._device.serial_number
         )
 
@@ -103,11 +103,14 @@ class PhynAlertSensor(PhynEntity, BinarySensorEntity):
         device: PhynDevice,
         name: str,
         readable_name: str,
-        device_property: str
+        device_property: str,
+        device_class: BinarySensorDeviceClass | None = None,
     ) -> None:
         """Initialize Alert Sensor."""
         super().__init__(name, readable_name, device)
         self._device_property: str = device_property
+        if device_class is not None:
+            self._attr_device_class = device_class
 
     @property
     def is_on(self) -> bool | None:
@@ -269,7 +272,7 @@ class PhynConnectivitySensor(PhynEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         """Return True when the device is online with the Phyn cloud."""
-        return self._device.available
+        return self._device.online
 
 
 class PhynSignalStrengthSensor(PhynEntity, SensorEntity):

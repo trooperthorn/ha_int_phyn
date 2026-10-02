@@ -1,0 +1,79 @@
+blueprint:
+  name: "Phyn: Device offline"
+  description: >
+    Notify when a Phyn device has been offline longer than a set time, and
+    again when it comes back. Short Wi-Fi drops are common on devices with a
+    weak signal, so the default delay ignores outages under 30 minutes.
+
+
+    Your actions can use the variables `device_name`, `offline` (true or
+    false) and `message`.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_phyn/blob/main/blueprints/automation/phyn/device_offline.yaml
+  input:
+    online_sensors:
+      name: Online sensors
+      description: The Phyn "Online" sensors to watch.
+      selector:
+        entity:
+          filter:
+            - integration: phyn
+              domain: binary_sensor
+              device_class: connectivity
+          multiple: true
+    duration:
+      name: Offline for
+      description: How long a device must stay offline before notifying.
+      default:
+        minutes: 30
+      selector:
+        duration:
+    notify_restore:
+      name: Notify when back online
+      description: Also notify when a device that was offline that long reconnects.
+      default: true
+      selector:
+        boolean:
+    actions:
+      name: Notification actions
+      default: []
+      selector:
+        action:
+
+mode: queued
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input online_sensors
+    to: "off"
+    for: !input duration
+    id: offline
+  - trigger: state
+    entity_id: !input online_sensors
+    from: "off"
+    to: "on"
+    id: restored
+
+variables:
+  notify_restore: !input notify_restore
+  duration: !input duration
+  offline_seconds: >-
+    {{ (duration.hours | default(0)) * 3600 + (duration.minutes | default(0)) * 60 + (duration.seconds | default(0)) }}
+  device_name: >-
+    {{ device_attr(device_id(trigger.entity_id), 'name_by_user')
+       or device_attr(device_id(trigger.entity_id), 'name') }}
+  offline: "{{ trigger.id == 'offline' }}"
+  message: >-
+    {% if offline %}{{ device_name }} has been offline since
+    {{ as_local(trigger.from_state.last_changed).strftime('%H:%M') }}.
+    {% else %}{{ device_name }} is back online.{% endif %}
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ offline or (notify_restore
+         and (now() - trigger.from_state.last_changed).total_seconds() >= offline_seconds | float) }}
+
+actions:
+  - sequence: !input actions

@@ -186,11 +186,13 @@
         "step": {
             "init": {
                 "data": {
+                    "dead_after_hours": "Water sensor battery dead after no report for (hours)",
                     "excluded_alert_types": "Suppress these alert types",
                     "local_poll_interval": "Local polling interval (seconds)",
+                    "low_battery_threshold": "Water sensor low battery level (%)",
                     "update_interval": "Cloud polling interval (seconds)"
                 },
-                "description": "Choose which alert types should be suppressed, how often the Phyn cloud is polled, and optionally a local network IP address per Phyn Plus for direct LAN access (faster updates, valve control that works during internet outages). Leave an IP field empty to disable local access for that device.",
+                "description": "Choose which alert types should be suppressed, the battery level at or below which a water sensor reports Low Battery, how many hours without a report mean its battery is dead, how often the Phyn cloud is polled, and optionally a local network IP address per Phyn Plus for direct LAN access (faster updates, valve control that works during internet outages). Leave an IP field empty to disable local access for that device.",
                 "title": "Phyn Options"
             }
         }

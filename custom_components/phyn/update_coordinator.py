@@ -24,6 +24,7 @@ from .const import (
 from .devices.pc import PhynClassicDevice
 from .devices.pp import PhynPlusDevice
 from .devices.pw import PhynWaterSensorDevice
+from .push import async_resubscribe, async_subscribe, unacked_topics
 
 MQTT_DOWN_RELOAD_THRESHOLD = 10
 STATE_FETCH_FAILURE_THRESHOLD = 3  # ~3 min at 60s polls before surfacing UpdateFailed
@@ -57,6 +58,8 @@ class PhynDataUpdateCoordinator(DataUpdateCoordinator[None]):
         self._mqtt_down_cycles: int = 0
         self._reload_in_progress: bool = False
         self._state_fetch_failures: int = 0
+        self._push_topics: set[str] = set()
+        self._unacked_cycles: int = 0
 
         super().__init__(
             hass,
@@ -65,6 +68,30 @@ class PhynDataUpdateCoordinator(DataUpdateCoordinator[None]):
             update_interval=update_interval,
         )
     
+    async def async_subscribe_push(self, topic: str) -> None:
+        """Subscribe to a device's realtime push topic, surviving reconnects."""
+        self._push_topics.add(topic)
+        await async_subscribe(self.api_client.mqtt, topic)
+
+    async def _async_check_push_subscriptions(self) -> None:
+        """Resend push subscriptions the broker has not acknowledged.
+
+        One poll of grace lets a normal SUBACK arrive before resending.
+        """
+        mqtt = self.api_client.mqtt
+        if not mqtt.is_connected():
+            return
+        stale = unacked_topics(mqtt, self._push_topics)
+        if not stale:
+            self._unacked_cycles = 0
+            return
+        self._unacked_cycles += 1
+        if self._unacked_cycles < 2:
+            return
+        self._unacked_cycles = 0
+        LOGGER.info("Resending %d unacknowledged Phyn push subscription(s)", len(stale))
+        await async_resubscribe(mqtt, stale)
+
     def add_device(self, home_id: str, device_id: str, product_code: str, home_name: str = "") -> None:
         """Add a device to the coordinator."""
         if product_code in ["PP1","PP2"]:
@@ -155,7 +182,8 @@ class PhynDataUpdateCoordinator(DataUpdateCoordinator[None]):
 
         # Reload threshold is intentionally high, see docs/operations.md.
         mqtt = self.api_client.mqtt
-        if mqtt.topics and not mqtt.is_connected():
+        await self._async_check_push_subscriptions()
+        if self._push_topics and not mqtt.is_connected():
             self._mqtt_down_cycles += 1
 
             # Snapshot aiophyn reconnect state-machine internals for diagnostics.

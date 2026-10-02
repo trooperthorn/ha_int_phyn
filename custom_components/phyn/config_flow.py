@@ -16,12 +16,16 @@ from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 
 from .const import (
     ALL_ALERT_TYPES,
+    CONF_DEAD_AFTER_HOURS,
     CONF_DEVICE_IDS,
     CONF_EXCLUDED_ALERT_TYPES,
     CONF_LOCAL_HOSTS,
     CONF_LOCAL_POLL_INTERVAL,
+    CONF_LOW_BATTERY_THRESHOLD,
     CONF_UPDATE_INTERVAL,
+    DEFAULT_DEAD_AFTER_HOURS,
     DEFAULT_LOCAL_POLL_INTERVAL,
+    DEFAULT_LOW_BATTERY_THRESHOLD,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     LOGGER,
@@ -363,6 +367,18 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
                 CONF_LOCAL_POLL_INTERVAL, DEFAULT_LOCAL_POLL_INTERVAL
             ),
         )
+        current_battery = submitted.get(
+            CONF_LOW_BATTERY_THRESHOLD,
+            self.config_entry.options.get(
+                CONF_LOW_BATTERY_THRESHOLD, DEFAULT_LOW_BATTERY_THRESHOLD
+            ),
+        )
+        current_dead_after = submitted.get(
+            CONF_DEAD_AFTER_HOURS,
+            self.config_entry.options.get(
+                CONF_DEAD_AFTER_HOURS, DEFAULT_DEAD_AFTER_HOURS
+            ),
+        )
         current_hosts: dict = self.config_entry.options.get(CONF_LOCAL_HOSTS, {})
 
         fields: dict = {
@@ -391,6 +407,30 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
                     max=MAX_LOCAL_POLL_INTERVAL,
                     step=1,
                     unit_of_measurement="s",
+                    mode=NumberSelectorMode.BOX,
+                )
+            ),
+            vol.Optional(
+                CONF_LOW_BATTERY_THRESHOLD,
+                default=current_battery,
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=1,
+                    max=100,
+                    step=1,
+                    unit_of_measurement="%",
+                    mode=NumberSelectorMode.BOX,
+                )
+            ),
+            vol.Optional(
+                CONF_DEAD_AFTER_HOURS,
+                default=current_dead_after,
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=12,
+                    max=336,
+                    step=1,
+                    unit_of_measurement="h",
                     mode=NumberSelectorMode.BOX,
                 )
             ),

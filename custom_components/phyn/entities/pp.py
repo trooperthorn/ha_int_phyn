@@ -311,6 +311,11 @@ class PhynValve(PhynEntity, ValveEntity):
         self._attr_device_class = ValveDeviceClass.WATER
         self._attr_reports_position = False
 
+    @property
+    def available(self) -> bool:
+        """Unavailable as soon as the device drops; a stale valve state misleads."""
+        return self._device.online
+
     async def async_open_valve(self) -> None:
         """Open the valve (local-first with cloud fallback)."""
         await self._device.async_open_valve()

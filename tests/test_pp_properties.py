@@ -5,6 +5,7 @@ at "unknown" when only REST or local data is available. Requires
 homeassistant + aiophyn importable (CI installs both); skipped otherwise.
 """
 import sys
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -40,10 +41,17 @@ def test_flow_rate_from_push_v():
     assert device.current_flow_rate == 1.234
 
 
-def test_flow_rate_from_rest_mean():
+def test_flow_rate_from_recent_rest_mean():
     device = make_device()
-    device._device_state["flow"] = {"mean": 0.5, "ts": 1}
+    device._device_state["flow"] = {"mean": 0.5, "ts": time.time() * 1000 - 60_000}
     assert device.current_flow_rate == 0.5
+
+
+def test_flow_rate_stale_rest_mean_is_zero():
+    """The REST mean is a past window; an old one means nothing is flowing now."""
+    device = make_device()
+    device._device_state["flow"] = {"mean": 1.45, "ts": time.time() * 1000 - 38 * 60_000}
+    assert device.current_flow_rate == 0.0
 
 
 def test_consumption_unknown_without_data():
@@ -111,3 +119,55 @@ def test_local_poll_interval_from_options():
     device = PhynPlusDevice(coordinator, "home1", "28f537aabbcc", "PP2")
     assert device.local_poll_interval == 15
     assert make_device().local_poll_interval == 10
+
+
+def _offline_for(device, minutes: float) -> None:
+    device._device_state["online_status"] = {
+        "v": "offline", "ts": (time.time() - minutes * 60) * 1000,
+    }
+
+
+def test_short_outage_keeps_entities_available():
+    device = make_device()
+    _offline_for(device, 5)
+    assert device.online is False
+    assert device.available is True
+
+
+def test_long_outage_marks_entities_unavailable():
+    device = make_device()
+    _offline_for(device, 45)
+    assert device.available is False
+
+
+def test_valve_unavailable_as_soon_as_offline():
+    from custom_components.phyn.entities.pp import PhynValve
+
+    device = make_device()
+    _offline_for(device, 1)
+    valve = next(e for e in device.entities if isinstance(e, PhynValve))
+    assert valve.available is False
+
+
+def test_online_sensor_reports_raw_state():
+    from custom_components.phyn.entities.base import PhynConnectivitySensor
+
+    device = make_device()
+    _offline_for(device, 1)
+    sensor = next(e for e in device.entities if isinstance(e, PhynConnectivitySensor))
+    assert sensor.is_on is False
+
+
+def test_mac_connections_include_wifi_mac():
+    """UniFi sees the PP2 Wi-Fi radio at the device id + 1 (28:..:df:85 for ..DF84)."""
+    coordinator = MagicMock()
+    coordinator.config_entry.options = {}
+    device = PhynPlusDevice(coordinator, "home1", "28F53743DF84", "PP2")
+    assert device.mac_addresses == {"28:f5:37:43:df:84", "28:f5:37:43:df:85"}
+
+
+def test_mac_connections_wrap_last_octet():
+    coordinator = MagicMock()
+    coordinator.config_entry.options = {}
+    device = PhynPlusDevice(coordinator, "home1", "28F53743DFFF", "PP2")
+    assert device.mac_addresses == {"28:f5:37:43:df:ff", "28:f5:37:43:e0:00"}

@@ -2,6 +2,18 @@
 
 Dated decisions with the alternative rejected and why.
 
+## 2026-10-08: Minimum Home Assistant is 2026.10.0, schemas use probatio
+
+Core 2026.10 types flow, service and websocket schemas as probatio, so the
+voluptuous schemas failed mypy (developer blog 2026-09-30, "Probatio is our
+validation engine"). The integration now imports `probatio` directly, as core
+does; runtime behavior is unchanged because core has validated with probatio
+since 2026.9. The suite runs on core 2026.10.0 and `hacs.json` follows the
+tested core. Mixing core's probatio markers (`cv.TARGET_SERVICE_FIELDS`) with
+voluptuous markers in one service schema also left mypy unable to infer the
+dict key type; one library resolves that. Rejected: aliasing `probatio as vol`,
+which core's lint config bans.
+
 ## 2026-09-04: runtime objects live on `entry.runtime_data`
 
 The client and coordinator moved from `hass.data[DOMAIN]` into a

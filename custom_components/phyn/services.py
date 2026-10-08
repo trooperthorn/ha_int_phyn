@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import voluptuous as vol
+import probatio
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -46,23 +46,23 @@ AUTOSHUTOFF_DURATIONS: dict[str, int | None] = {
     "indefinite": None,
 }
 
-LEAK_TEST_SCHEMA = vol.Schema(
+LEAK_TEST_SCHEMA = probatio.Schema(
     {
         **cv.TARGET_SERVICE_FIELDS,
-        vol.Optional("extended", default=False): cv.boolean,
+        probatio.Optional("extended", default=False): cv.boolean,
     }
 )
 
-PAUSE_AUTOSHUTOFF_SCHEMA = vol.Schema(
+PAUSE_AUTOSHUTOFF_SCHEMA = probatio.Schema(
     {
         **cv.TARGET_SERVICE_FIELDS,
-        vol.Optional("duration", default="indefinite"): vol.In(AUTOSHUTOFF_DURATIONS),
+        probatio.Optional("duration", default="indefinite"): probatio.In(AUTOSHUTOFF_DURATIONS),
     }
 )
 
-MARK_ALERT_READ_SCHEMA = vol.Schema(
+MARK_ALERT_READ_SCHEMA = probatio.Schema(
     {
-        vol.Required("alert_id"): cv.string,
+        probatio.Required("alert_id"): cv.string,
     }
 )
 

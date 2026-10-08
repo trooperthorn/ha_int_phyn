@@ -1,6 +1,6 @@
 """Config flow for phyn integration."""
 import homeassistant.helpers.config_validation as cv
-import voluptuous as vol
+import probatio
 from aiophyn import async_get_api
 from aiophyn.errors import RequestError
 from botocore.exceptions import ClientError
@@ -42,13 +42,13 @@ from .jnap import (
     normalize_mac,
 )
 
-DATA_SCHEMA = vol.Schema({
-    vol.Required(CONF_USERNAME): str,
-    vol.Required(CONF_PASSWORD): str,
+DATA_SCHEMA = probatio.Schema({
+    probatio.Required(CONF_USERNAME): str,
+    probatio.Required(CONF_PASSWORD): str,
 })
-REAUTH_SCHEMA = vol.Schema({
-    vol.Required(CONF_USERNAME): str,
-    vol.Required(CONF_PASSWORD): str,
+REAUTH_SCHEMA = probatio.Schema({
+    probatio.Required(CONF_USERNAME): str,
+    probatio.Required(CONF_PASSWORD): str,
 })
 
 
@@ -76,7 +76,7 @@ def _device_label(device: dict) -> str:
     return f"{name} ({device['device_id']})" if name else device["device_id"]
 
 
-def _build_device_schema(homes: list[dict], current_device_ids: list[str] | None = None) -> vol.Schema:
+def _build_device_schema(homes: list[dict], current_device_ids: list[str] | None = None) -> probatio.Schema:
     """Build a schema with one multi_select per home.
 
     Each field key is the home name so that HA's config flow renders it as the
@@ -94,8 +94,8 @@ def _build_device_schema(homes: list[dict], current_device_ids: list[str] | None
         device_map = {d["device_id"]: _device_label(d) for d in home["devices"]}
         all_ids = list(device_map.keys())
         default_ids = ([d for d in all_ids if d in current] or all_ids) if current else all_ids
-        fields[vol.Optional(home_name, default=default_ids)] = cv.multi_select(device_map)
-    return vol.Schema(fields)
+        fields[probatio.Optional(home_name, default=default_ids)] = cv.multi_select(device_map)
+    return probatio.Schema(fields)
 
 
 def _extract_device_ids(user_input: dict, homes: list[dict]) -> list[str]:
@@ -344,7 +344,7 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
             if device.product_code in ("PP1", "PP2")
         ]
 
-    def _build_schema(self, user_input: dict | None = None) -> vol.Schema:
+    def _build_schema(self, user_input: dict | None = None) -> probatio.Schema:
         """Build the options schema, including per-device local host fields.
 
         When re-showing the form after a validation error, *user_input*
@@ -382,11 +382,11 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
         current_hosts: dict = self.config_entry.options.get(CONF_LOCAL_HOSTS, {})
 
         fields: dict = {
-            vol.Optional(
+            probatio.Optional(
                 CONF_EXCLUDED_ALERT_TYPES,
                 default=current_excluded,
             ): cv.multi_select(ALL_ALERT_TYPES),
-            vol.Optional(
+            probatio.Optional(
                 CONF_UPDATE_INTERVAL,
                 default=current_interval,
             ): NumberSelector(
@@ -398,7 +398,7 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
                     mode=NumberSelectorMode.BOX,
                 )
             ),
-            vol.Optional(
+            probatio.Optional(
                 CONF_LOCAL_POLL_INTERVAL,
                 default=current_local_interval,
             ): NumberSelector(
@@ -410,7 +410,7 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
                     mode=NumberSelectorMode.BOX,
                 )
             ),
-            vol.Optional(
+            probatio.Optional(
                 CONF_LOW_BATTERY_THRESHOLD,
                 default=current_battery,
             ): NumberSelector(
@@ -422,7 +422,7 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
                     mode=NumberSelectorMode.BOX,
                 )
             ),
-            vol.Optional(
+            probatio.Optional(
                 CONF_DEAD_AFTER_HOURS,
                 default=current_dead_after,
             ): NumberSelector(
@@ -443,9 +443,9 @@ class PhynOptionsFlow(config_entries.OptionsFlow):
             key = f"Local IP for {device.device_name} ({device.id[-4:]})"
             self._local_field_map[key] = device.id
             current = submitted.get(key, current_hosts.get(device.id, ""))
-            fields[vol.Optional(key, default=current)] = str
+            fields[probatio.Optional(key, default=current)] = str
 
-        return vol.Schema(fields)
+        return probatio.Schema(fields)
 
     async def async_step_init(self, user_input=None):
         """Manage options."""

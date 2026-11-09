@@ -171,3 +171,62 @@ def test_mac_connections_wrap_last_octet():
     coordinator.config_entry.options = {}
     device = PhynPlusDevice(coordinator, "home1", "28F53743DFFF", "PP2")
     assert device.mac_addresses == {"28:f5:37:43:df:ff", "28:f5:37:43:e0:00"}
+
+
+# --- local attribute/get mapping (fw 4.9.5.4 vocabulary) ---
+
+
+def _valve_entity(device: PhynPlusDevice):
+    from custom_components.phyn.entities.pp import PhynValve
+
+    return next(e for e in device.entities if isinstance(e, PhynValve))
+
+
+async def _apply(device: PhynPlusDevice, product: dict) -> None:
+    await device._apply_local_attributes({"product": product, "stats": {}})
+
+
+async def test_local_sov_opened_maps_to_open():
+    device = make_device()
+    await _apply(device, {"sov_state_str": "opened"})
+    assert device._device_state["sov_status"] == {"v": "Open"}
+    assert device.valve_open is True
+
+
+async def test_local_sov_closed_maps_to_close():
+    device = make_device()
+    await _apply(device, {"sov_state_str": "closed"})
+    assert device._device_state["sov_status"] == {"v": "Close"}
+    assert device.valve_open is False
+
+
+async def test_local_sov_transitional_maps_to_partial():
+    device = make_device()
+    await _apply(device, {"sov_state_str": "opened"})
+    await _apply(device, {"sov_state_str": "closing"})
+    assert device.valve_changing is True
+    # last known state is held while changing
+    assert device.valve_open is True
+
+
+async def test_local_plumbing_check_maps_to_leakexp():
+    device = make_device()
+    await _apply(device, {"sov_state_str": "closed", "sov_plumbing_check_in_progress": True})
+    assert device.leak_test_running is True
+
+
+async def test_local_unknown_sov_value_does_not_overwrite_state():
+    device = make_device()
+    device._device_state["sov_status"] = {"v": "Open"}
+    await _apply(device, {"sov_state_str": "wedged", "sensor_pressure_1": 44.0})
+    assert device._device_state["sov_status"] == {"v": "Open"}
+    assert device.current_psi == 44.0
+
+
+async def test_local_scheduler_enable_feeds_preference_switch():
+    device = make_device()
+    assert device.scheduled_leak_test_enabled is None
+    await _apply(device, {"scheduler_enable": True})
+    assert device.scheduled_leak_test_enabled is True
+    await _apply(device, {"scheduler_enable": False})
+    assert device.scheduled_leak_test_enabled is False

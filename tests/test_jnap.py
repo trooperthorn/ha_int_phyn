@@ -95,3 +95,97 @@ def test_normalize_mac():
     assert normalize_mac("28:F5:37:AB:CD:EF") == "28f537abcdef"
     assert normalize_mac("28f537abcdef") == "28f537abcdef"
     assert normalize_mac("28-F5-37-ab-cd-ef") == "28f537abcdef"
+
+
+# --- fw 4.9.5.4: multi-segment responses and top-level attribute sections ---
+
+_read_response = jnap._read_response
+JnapClient = jnap.JnapClient
+
+
+class _ChunkedReader:
+    """Minimal StreamReader stand-in that yields *size*-byte chunks."""
+
+    def __init__(self, data: bytes, size: int) -> None:
+        self._data = data
+        self._size = size
+        self.reads = 0
+
+    async def read(self, _n: int) -> bytes:
+        self.reads += 1
+        chunk, self._data = self._data[: self._size], self._data[self._size :]
+        return chunk
+
+
+def _attribute_dump_response() -> tuple[bytes, dict]:
+    """A realistic attribute/get reply: debug line, large body, pipelined trailer."""
+    sections = {
+        "result": "OK",
+        "system": {"fw_version": 40905004, "hw_product": "PP2"},
+        "product": {"sov_state_str": "opened", "consumption_total": 1997.19, "pad": "x" * 6000},
+        "stats": {"wifi_sta_rssi": -66},
+    }
+    body = json.dumps(sections).encode()
+    raw = (
+        b"HTTP/1.1 200 OK\r\n"
+        b"GetDataFromDaemon: Thread 18188 calling WASP_Init\n"  # LF-terminated debug line
+        b"Content-Type: application/json; charset=utf-8\r\n"
+        b"Connection: close\r\n"
+        + f"Content-Length: {len(body)}\r\n".encode()
+        + b"Server: lighttpd/1.4.49\r\n\r\n"
+        + body
+        + b"\n\n\nHTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\n"
+        b"Connection: close\r\nContent-Length: 2\r\n\r\n{}"
+    )
+    expected = {k: v for k, v in sections.items() if k != "result"}
+    return raw, expected
+
+
+@pytest.mark.parametrize("chunk", [7, 100, 1460, 1 << 20])
+async def test_read_response_accumulates_across_segments(chunk):
+    """A single read() only returns the first TCP segment; we must keep reading."""
+    raw, expected = _attribute_dump_response()
+    reader = _ChunkedReader(raw, chunk)
+    got = await _read_response(reader)
+    assert parse_response(got) == expected
+
+
+async def test_read_response_stops_at_content_length():
+    """Do not wait for EOF / the pipelined trailer once the body is complete."""
+    raw, _ = _attribute_dump_response()
+    header_end = raw.find(b"\r\n\r\n") + 4
+    body_len = int(raw.split(b"Content-Length: ")[1].split(b"\r\n")[0])
+    reader = _ChunkedReader(raw, header_end + body_len)  # exactly headers+body
+    got = await _read_response(reader)
+    assert reader.reads == 1
+    assert len(got) == header_end + body_len
+
+
+async def test_read_response_without_content_length_reads_to_eof():
+    body = json.dumps({"result": "OK", "output": {"a": 1}}).encode()
+    raw = b"HTTP/1.1 200 OK\r\n\r\n" + body + b"\r\ngarbage"
+    got = await _read_response(_ChunkedReader(raw, 5))
+    assert got == raw
+    assert parse_response(got) == {"a": 1}
+
+
+def test_single_read_of_first_segment_fails_to_parse():
+    """Regression guard: the pre-fix behaviour (first 1460 bytes) cannot parse."""
+    raw, _ = _attribute_dump_response()
+    with pytest.raises(JnapProtocolError):
+        parse_response(raw[:1460])
+
+
+def test_parse_returns_top_level_sections_without_output_wrapper():
+    body = json.dumps({"result": "OK", "system": {"a": 1}, "product": {"b": 2}}).encode()
+    assert parse_response(_http(body)) == {"system": {"a": 1}, "product": {"b": 2}}
+
+
+def test_parse_prefers_output_wrapper_when_present():
+    body = json.dumps({"result": "OK", "output": {"state": "Open"}, "noise": 1}).encode()
+    assert parse_response(_http(body)) == {"state": "Open"}
+
+
+def test_reboot_action_constant():
+    assert jnap.ACTION_REBOOT == "http://phyn.com/jnap/core/Reboot"
+    assert hasattr(JnapClient, "reboot")

@@ -57,6 +57,16 @@ if TYPE_CHECKING:
 NAME_WATER_TEMPERATURE = "Current water temperature"
 NAME_WATER_PRESSURE = "Current water pressure"
 
+#: Local JNAP ``sov_state_str`` values -> cloud ``sov_status.v`` vocabulary.
+LOCAL_SOV_STATE_MAP: dict[str, str] = {
+    "opened": "Open",
+    "open": "Open",
+    "closed": "Close",
+    "close": "Close",
+    "opening": "Partial",
+    "closing": "Partial",
+}
+
 class PhynPlusDevice(PhynDevice):
     """Phyn device object."""
 
@@ -475,9 +485,30 @@ class PhynPlusDevice(PhynDevice):
         if isinstance(flow_state, str) and flow_state:
             update_data["flow_state"] = {"v": flow_state}
 
-        sov_state = product.get("sov_state_str")
-        if isinstance(sov_state, str) and sov_state:
-            update_data["sov_status"] = {"v": sov_state}
+        # Local firmware vocabulary ("opened"/"closed") -> the cloud
+        # vocabulary the entities test against ("Open"/"Close"/"Partial"/
+        # "LeakExp"). Unknown values are deliberately not written so a firmware
+        # change cannot flip the valve entity to a wrong state.
+        if product.get("sov_plumbing_check_in_progress") is True:
+            update_data["sov_status"] = {"v": "LeakExp"}
+        else:
+            sov_state = product.get("sov_state_str")
+            if isinstance(sov_state, str) and sov_state.lower() in LOCAL_SOV_STATE_MAP:
+                update_data["sov_status"] = {"v": LOCAL_SOV_STATE_MAP[sov_state.lower()]}
+            elif sov_state:
+                LOGGER.debug(
+                    "Unmapped local sov_state_str %r for %s",
+                    sov_state,
+                    self._phyn_device_id,
+                )
+
+        # The device reports the leak-test scheduler directly; mirror it into
+        # the preferences dict the switch entity reads.
+        scheduler = product.get("scheduler_enable")
+        if isinstance(scheduler, bool):
+            self._device_preferences.setdefault("scheduler_enable", {})["value"] = (
+                "true" if scheduler else "false"
+            )
 
         consumption = self._local_number(product.get("consumption_total"))
         if consumption is not None:

@@ -31,7 +31,9 @@ Protocol summary (verified on PP2 firmware 4.9.x):
   the `X-JNAP-Action` header, not the path.
 - Authorization: `X-JNAP-Authorization: Basic <base64("admin:admin")>` -
   static firmware credentials.
-- Response envelope: `{"result": "OK", "output": {...}}`.
+- Response envelope: `{"result": "OK", "output": {...}}`. `attribute/get` on
+  fw `4.9.5.4` has no `output` wrapper: `system`, `product` and `stats` sit at
+  the top level beside `result`. The client accepts both shapes.
 - Known-good actions:
   - `http://phyn.com/jnap/core/GetDeviceInfo` → `deviceID` (MAC),
     `serialNumber`, `productCode`, `firmwareVersion`
@@ -46,12 +48,16 @@ Protocol summary (verified on PP2 firmware 4.9.x):
 - The local interface runs in parallel with the cloud connection. It is
   polling-only, there is no local push/subscribe mechanism.
 
-**Firmware quirk:** on fw `4.9.0.23`, the `attribute/get` response is
+**Firmware quirk:** on fw `4.9.0.23` and `4.9.5.4`, the `attribute/get` response is
 malformed HTTP, a debug line leaks into the headers and a pipelined second
 response follows the declared `Content-Length` body. Strict clients (aiohttp)
 reject it. This integration's client (`custom_components/phyn/jnap.py`)
 therefore speaks raw TCP and parses tolerantly: it skips non-header lines and
-reads exactly `Content-Length` bytes.
+keeps reading until `Content-Length` bytes of body have arrived (the ~11 KB
+dump spans several TCP segments), then ignores anything after it.
+
+`product.sov_state_str` uses the local vocabulary `opened`/`closed`, which the
+integration maps to the cloud's `Open`/`Close`.
 
 Sources:
 

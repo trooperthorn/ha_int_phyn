@@ -57,6 +57,21 @@ if TYPE_CHECKING:
 NAME_WATER_TEMPERATURE = "Current water temperature"
 NAME_WATER_PRESSURE = "Current water pressure"
 
+#: Local JNAP ``sov_state_str`` values -> cloud ``sov_status.v`` vocabulary.
+LOCAL_SOV_STATE_MAP: dict[str, str] = {
+    "opened": "Open",
+    "open": "Open",
+    "closed": "Close",
+    "close": "Close",
+    "opening": "Partial",
+    "closing": "Partial",
+}
+
+#: After a cloud write of ``scheduler_enable``, ignore the device's locally
+#: reported value for this long so a device that has not yet synced the change
+#: cannot flip the switch back.
+SCHEDULER_LOCAL_HOLD_SECONDS = 60
+
 class PhynPlusDevice(PhynDevice):
     """Phyn device object."""
 
@@ -91,6 +106,7 @@ class PhynPlusDevice(PhynDevice):
         self._away_mode: dict[str, Any] = {}
         self._water_usage: dict[str, Any] = {}
         self._last_known_valve_state: bool = True
+        self._scheduler_set_ts: float = 0.0
         self._latest_health_test: dict[str, Any] | None = None
         self._rt_device_state: dict[str, Any] = {}
         self._state_lock: Lock = Lock()
@@ -416,6 +432,21 @@ class PhynPlusDevice(PhynDevice):
                 return None
         return None
 
+    @staticmethod
+    def _local_bool(value: Any) -> bool | None:
+        """Coerce a JNAP/WASP flag (bool, 0/1, "true"/"false") into a bool."""
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, int) and value in (0, 1):
+            return bool(value)
+        if isinstance(value, str):
+            text = value.strip().lower()
+            if text in ("true", "1"):
+                return True
+            if text in ("false", "0"):
+                return False
+        return None
+
     async def _async_local_poll(self, now: Any = None) -> None:
         """Poll the device's local JNAP API and merge telemetry into state."""
         if self._local_client is None:
@@ -475,9 +506,38 @@ class PhynPlusDevice(PhynDevice):
         if isinstance(flow_state, str) and flow_state:
             update_data["flow_state"] = {"v": flow_state}
 
-        sov_state = product.get("sov_state_str")
-        if isinstance(sov_state, str) and sov_state:
-            update_data["sov_status"] = {"v": sov_state}
+        # Local firmware vocabulary ("opened"/"closed") -> the cloud
+        # vocabulary the entities test against ("Open"/"Close"/"Partial"/
+        # "LeakExp"). Unknown values are deliberately not written so a firmware
+        # change cannot flip the valve entity to a wrong state.
+        sov_unmapped = False
+        if self._local_bool(product.get("sov_plumbing_check_in_progress")) is True:
+            update_data["sov_status"] = {"v": "LeakExp"}
+        else:
+            sov_state = product.get("sov_state_str")
+            if isinstance(sov_state, str) and sov_state.lower() in LOCAL_SOV_STATE_MAP:
+                update_data["sov_status"] = {"v": LOCAL_SOV_STATE_MAP[sov_state.lower()]}
+            elif sov_state:
+                # Leave the cloud state throttle alone below so the REST
+                # state fetch keeps the valve fresh while local cannot.
+                sov_unmapped = True
+                LOGGER.debug(
+                    "Unmapped local sov_state_str %r for %s",
+                    sov_state,
+                    self._phyn_device_id,
+                )
+
+        # The device reports the leak-test scheduler directly; mirror it into
+        # the preferences dict the switch entity reads. Skipped briefly after
+        # a cloud write so a device that has not synced yet cannot undo it.
+        scheduler = self._local_bool(product.get("scheduler_enable"))
+        if (
+            scheduler is not None
+            and time.time() - self._scheduler_set_ts >= SCHEDULER_LOCAL_HOLD_SECONDS
+        ):
+            self._device_preferences.setdefault("scheduler_enable", {})["value"] = (
+                "true" if scheduler else "false"
+            )
 
         consumption = self._local_number(product.get("consumption_total"))
         if consumption is not None:
@@ -502,8 +562,10 @@ class PhynPlusDevice(PhynDevice):
             if "consumption" in update_data:
                 self._rt_device_state["consumption"] = {"v": update_data["consumption"]}
             # Refresh the throttle stamp: while local polling is healthy the
-            # cloud state endpoint does not need to be hit every cycle.
-            self._device_state["last_updated"] = math.floor(time.time())
+            # cloud state endpoint does not need to be hit every cycle. Not
+            # when the valve state was unmappable: the cloud must cover it.
+            if not sov_unmapped:
+                self._device_state["last_updated"] = math.floor(time.time())
             self._update_last_known_valve_state()
 
         self._write_entity_states()
@@ -548,6 +610,8 @@ class PhynPlusDevice(PhynDevice):
         }]
         LOGGER.debug("Setting preference '%s' to '%s'", name, val)
         await self._coordinator.api_client.device.set_device_preferences(self._phyn_device_id, params)
+        if name == "scheduler_enable":
+            self._scheduler_set_ts = time.time()
         if name not in self._device_preferences:
             self._device_preferences[name] = {}
         self._device_preferences[name]["value"] = val
@@ -574,7 +638,8 @@ class PhynPlusDevice(PhynDevice):
             "value": val
         }]
         await self._coordinator.api_client.device.set_device_preferences(self._phyn_device_id, params)
-        self._device_preferences[key]["value"] = val
+        self._scheduler_set_ts = time.time()
+        self._device_preferences.setdefault(key, {})["value"] = val
     
     async def _update_autoshutoff(self, *_) -> None:
         """Update auto shutoff status"""
